@@ -2,14 +2,16 @@ import TelegramBot from "node-telegram-bot-api";
 import "dotenv/config";
 import { handleStartCommand, handleCargarOfertasCommand } from "../controllers/bot.controller.js";
 import { actualizarPreferencias } from "./preferencias.service.js";
-import { marcarConfiguracionCompleta } from "./usuario.service.js";
-import { obtenerCategoriasPorUsuario, togglePreferenciaCategoria } from "./categoria.service.js";
+import { findUsuarioPorTelegramId, marcarConfiguracionCompleta } from "./usuario.service.js";
+import { ROLES } from "../dictionaries/index.js";
+import { obtenerCategorias, crearCategoria, obtenerCategoriasPorUsuario, togglePreferenciaCategoria } from "./categoria.service.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const miniAppUrl = process.env.MINI_APP_URL;
 
 const userStates = {};
 
+// ... (Todos los menús de configuración de usuario se mantienen igual)
 const menuConfiguracionOptions = (haHechoCambios) => ({
   reply_markup: {
     inline_keyboard: [
@@ -20,8 +22,6 @@ const menuConfiguracionOptions = (haHechoCambios) => ({
     ],
   },
 });
-
-// ... (El resto de las definiciones de menús de descuento y precios se mantienen igual)
 const menuDescuentoOptions = {
   reply_markup: {
     inline_keyboard: [
@@ -72,7 +72,16 @@ const generarMenuPrecioMax = (precioMin) => {
   teclado.push([{ text: "🔙 Volver", callback_data: "config_precios" }]);
   return { reply_markup: { inline_keyboard: teclado } };
 };
-// ... (Fin de las definiciones que se mantienen)
+// ... (Fin de los menús de usuario)
+
+const menuAdminOptions = {
+  reply_markup: {
+    inline_keyboard: [
+      [{ text: "➕ Añadir Categoría", callback_data: "admin_add_cat" }],
+      [{ text: "🏷️ Gestionar Etiquetas", callback_data: "admin_manage_tags" }],
+    ],
+  },
+};
 
 export const initializeBot = () => {
   if (!token) {
@@ -86,7 +95,7 @@ export const initializeBot = () => {
 
   const bot = new TelegramBot(token, { polling: true });
 
-  // ... (Los listeners de /start, /configurar, /cargar_ofertas se mantienen igual)
+  // ... (Listeners de /start, /configurar, /cargar_ofertas se mantienen igual)
   bot.onText(/\/start/, (msg) => {
     delete userStates[msg.chat.id];
     handleStartCommand(bot, msg);
@@ -103,10 +112,20 @@ export const initializeBot = () => {
   bot.onText(/\/cargar_ofertas/, (msg) => {
     handleCargarOfertasCommand(bot, msg);
   });
-  // ... (Fin de los listeners que se mantienen)
+
+  bot.onText(/\/admin/, async (msg) => {
+    const chatId = msg.chat.id;
+    const usuario = await findUsuarioPorTelegramId(msg.from.id);
+    if (usuario?.rol !== ROLES.ADMIN) {
+      return bot.sendMessage(chatId, "🚫 Acceso denegado.");
+    }
+    bot.sendMessage(chatId, "👑 *Panel de Administración*\n\nSelecciona una opción:", {
+      ...menuAdminOptions,
+      parse_mode: "Markdown",
+    });
+  });
 
   bot.on("callback_query", async (callbackQuery) => {
-    // ... (Toda la lógica para precios y descuentos se mantiene igual)
     const msg = callbackQuery.message;
     const data = callbackQuery.data;
     const chatId = msg.chat.id;
@@ -114,6 +133,13 @@ export const initializeBot = () => {
 
     bot.answerCallbackQuery(callbackQuery.id);
 
+    // Lógica de Admin
+    if (data === "admin_add_cat") {
+      userStates[chatId] = { admin_action: "add_cat_name" };
+      return bot.sendMessage(chatId, "✏️ Introduce el nombre para la nueva categoría:");
+    }
+
+    // ... (Toda la lógica de callback_query para usuarios se mantiene igual)
     try {
       if (data === "configurar_preferencias") {
         if (!userStates[chatId]) userStates[chatId] = {};
@@ -189,11 +215,74 @@ export const initializeBot = () => {
         });
       }
     } catch (error) {
-      console.error("Error procesando callback_query:", error);
+      console.error("Error procesando callback_query de usuario:", error);
       bot.sendMessage(chatId, "Ocurrió un error al procesar tu selección. Inténtalo de nuevo.");
     }
   });
 
+  bot.on("message", async (msg) => {
+    const chatId = msg.chat.id;
+    const state = userStates[chatId];
+
+    if (!state || !state.admin_action || msg.text.startsWith("/")) return;
+
+    const adminId = msg.from.id;
+    const adminUser = await findUsuarioPorTelegramId(adminId);
+    if (adminUser?.rol !== ROLES.ADMIN) return;
+
+    try {
+      if (state.admin_action === "add_cat_name") {
+        userStates[chatId] = { admin_action: "add_cat_emoji", nombre: msg.text };
+        bot.sendMessage(chatId, "👍 Nombre guardado. Ahora, envía el emoji para esta categoría (o escribe 'no' si no quieres uno).");
+      } else if (state.admin_action === "add_cat_emoji") {
+        const emoji = msg.text.toLowerCase() === "no" ? null : msg.text;
+        userStates[chatId] = { admin_action: "add_cat_parent", nombre: state.nombre, emoji };
+
+        const categorias = await obtenerCategorias();
+        const teclado = categorias.filter((c) => !c.padre_id).map((c) => [{ text: c.nombre, callback_data: `set_parent_${c.id}` }]);
+
+        teclado.unshift([{ text: " ninguna (es categoría principal)", callback_data: "set_parent_null" }]);
+
+        bot.sendMessage(chatId, "✨ Emoji guardado. ¿Esta es una subcategoría de alguna de las siguientes?", {
+          reply_markup: { inline_keyboard: teclado },
+        });
+      }
+    } catch (error) {
+      console.error("Error en el flujo de admin:", error);
+      bot.sendMessage(chatId, "❌ Ocurrió un error. Proceso cancelado.");
+      delete userStates[chatId];
+    }
+  });
+
+  bot.on("callback_query", async (callbackQuery) => {
+    const data = callbackQuery.data;
+    if (!data.startsWith("set_parent_")) return;
+
+    const chatId = callbackQuery.message.chat.id;
+    const state = userStates[chatId];
+    if (!state || state.admin_action !== "add_cat_parent") return;
+
+    bot.answerCallbackQuery(callbackQuery.id);
+
+    try {
+      const padre_id = data === "set_parent_null" ? null : parseInt(data.replace("set_parent_", ""), 10);
+      const { nombre, emoji } = state;
+
+      await crearCategoria({ nombre, emoji, padre_id });
+
+      bot.editMessageText(`✅ ¡Categoría "*${nombre}*" creada con éxito!`, {
+        chat_id: chatId,
+        message_id: callbackQuery.message.message_id,
+        parse_mode: "Markdown",
+      });
+    } catch (error) {
+      bot.sendMessage(chatId, `❌ Error: ${error.message}`);
+    } finally {
+      delete userStates[chatId];
+    }
+  });
+
+  // ... (Listener de web_app_data se mantiene igual)
   bot.on("web_app_data", async (msg) => {
     const chatId = msg.chat.id;
     const fromId = msg.from.id;

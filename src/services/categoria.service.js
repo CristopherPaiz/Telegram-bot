@@ -10,6 +10,22 @@ export const obtenerCategorias = async () => {
   }
 };
 
+export const crearCategoria = async ({ nombre, emoji, padre_id }) => {
+  try {
+    const resultado = await turso.execute({
+      sql: "INSERT INTO Categorias (nombre, emoji, padre_id) VALUES (?, ?, ?) RETURNING *;",
+      args: [nombre, emoji || null, padre_id || null],
+    });
+    return resultado.rows[0];
+  } catch (error) {
+    console.error("Error al crear la categoría:", error);
+    if (error.message.includes("UNIQUE constraint failed")) {
+      throw new Error("Ya existe una categoría con ese nombre.");
+    }
+    throw new Error("No se pudo crear la categoría.");
+  }
+};
+
 export const obtenerCategoriasPorUsuario = async (telegramId) => {
   try {
     const resultado = await turso.execute({
