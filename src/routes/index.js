@@ -1,11 +1,10 @@
 import { Router } from "express";
-import { obtenerCategorias, obtenerCategoriasPorUsuario, crearCategoria } from "../services/categoria.service.js";
+import { obtenerCategorias, obtenerCategoriasPorUsuario, crearCategoria, actualizarCategoriasUsuario } from "../services/categoria.service.js";
 import { findUsuarioPorTelegramId } from "../services/usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 
 const router = Router();
 
-// Middleware de autenticación de admin para rutas seguras
 const isAdmin = async (req, res, next) => {
   const adminId = req.header("X-Admin-ID");
   if (!adminId) {
@@ -43,6 +42,17 @@ router.get("/usuario/:telegramId/categorias", async (req, res) => {
     res.status(200).json({ status: "success", data: { selectedIds: Array.from(categoriasIds) } });
   } catch (error) {
     res.status(500).json({ status: "error", message: "Error al obtener las categorías del usuario" });
+  }
+});
+
+router.post("/usuario/:telegramId/categorias", async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const { selectedIds } = req.body;
+    await actualizarCategoriasUsuario(telegramId, selectedIds);
+    res.status(200).json({ status: "success", message: "Preferencias actualizadas" });
+  } catch (error) {
+    res.status(500).json({ status: "error", message: "Error al actualizar las preferencias" });
   }
 });
 

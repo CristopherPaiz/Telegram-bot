@@ -39,28 +39,25 @@ export const obtenerCategoriasPorUsuario = async (telegramId) => {
   }
 };
 
-export const togglePreferenciaCategoria = async (telegramId, categoriaId) => {
+export const actualizarCategoriasUsuario = async (telegramId, selectedIds) => {
+  const tx = await turso.transaction();
   try {
-    const existe = await turso.execute({
-      sql: "SELECT 1 FROM PreferenciasUsuarioCategoria WHERE usuario_telegram_id = ? AND categoria_id = ?;",
-      args: [telegramId, categoriaId],
+    await tx.execute({
+      sql: "DELETE FROM PreferenciasUsuarioCategoria WHERE usuario_telegram_id = ?;",
+      args: [telegramId],
     });
 
-    if (existe.rows.length > 0) {
-      await turso.execute({
-        sql: "DELETE FROM PreferenciasUsuarioCategoria WHERE usuario_telegram_id = ? AND categoria_id = ?;",
-        args: [telegramId, categoriaId],
-      });
-      return "eliminada";
-    } else {
-      await turso.execute({
+    if (selectedIds && selectedIds.length > 0) {
+      const stmts = selectedIds.map((id) => ({
         sql: "INSERT INTO PreferenciasUsuarioCategoria (usuario_telegram_id, categoria_id) VALUES (?, ?);",
-        args: [telegramId, categoriaId],
-      });
-      return "agregada";
+        args: [telegramId, id],
+      }));
+      await tx.batch(stmts);
     }
+    await tx.commit();
   } catch (error) {
-    console.error("Error al alternar la preferencia de categoría:", error);
-    throw new Error("No se pudo actualizar la preferencia de categoría.");
+    await tx.rollback();
+    console.error("Error al actualizar categorías de usuario:", error);
+    throw new Error("No se pudieron actualizar las preferencias de categorías.");
   }
 };
