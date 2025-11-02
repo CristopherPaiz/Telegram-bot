@@ -8,4 +8,16 @@ app.listen(PORT, () => {
   console.log(`Servidor Express escuchando en el puerto ${PORT}`);
 });
 
-initializeBot();
+const bot = initializeBot();
+
+const gracefulShutdown = () => {
+  console.log("Deteniendo el bot de Telegram...");
+  bot.stopPolling().then(() => {
+    console.log("Bot detenido. Saliendo.");
+    process.exit(0);
+  });
+};
+
+// Capturar señales de terminación para detener el bot limpiamente
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);

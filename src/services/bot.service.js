@@ -149,7 +149,8 @@ export const initializeBot = () => {
       const data = JSON.parse(msg.web_app_data.data);
       if (data.status === "success") {
         if (originalMessageId) {
-          await bot.deleteMessage(chatId, originalMessageId).catch(() => {});
+          await bot.deleteMessage(chatId, originalMessageId).catch(() => {
+          });
         }
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
       }
