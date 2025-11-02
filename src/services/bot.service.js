@@ -143,15 +143,17 @@ export const initializeBot = () => {
 
   bot.on("web_app_data", async (msg) => {
     const chatId = msg.chat.id;
-    const originalMessageId = msg.message ? msg.message.message_id : null;
+    const originalMessageId = msg.message_id; // ESTA ES LA CORRECCIÓN CLAVE
 
     try {
       const data = JSON.parse(msg.web_app_data.data);
       if (data.status === "success") {
         if (originalMessageId) {
           await bot.deleteMessage(chatId, originalMessageId).catch(() => {
+            // Ignorar si el mensaje ya no existe.
           });
         }
+        // Llamar a handleStartCommand para enviar el resumen actualizado.
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
       }
     } catch (error) {
