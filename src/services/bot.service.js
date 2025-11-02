@@ -146,7 +146,7 @@ export const initializeBot = () => {
     try {
       const data = JSON.parse(msg.web_app_data.data);
       if (data.status === "success") {
-        await bot.sendMessage(chatId, `✅ ¡Tu configuración ha sido guardada con éxito!`);
+        await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
       }
     } catch (error) {
