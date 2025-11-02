@@ -1,7 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import "dotenv/config";
 import { handleStartCommand, handleCargarOfertasCommand } from "../controllers/bot.controller.js";
-import { findUsuarioPorTelegramId, marcarConfiguracionCompleta } from "./usuario.service.js";
+import { findUsuarioPorTelegramId } from "./usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerCategorias, crearCategoria } from "./categoria.service.js";
 
@@ -142,24 +142,47 @@ export const initializeBot = () => {
   });
 
   bot.on("web_app_data", async (msg) => {
+    console.log("\n\n--- [DEBUG] INICIO DEL MANEJADOR web_app_data ---");
+    console.log("Objeto 'msg' completo recibido de Telegram:", JSON.stringify(msg, null, 2));
+
     const chatId = msg.chat.id;
-    const originalMessageId = msg.message_id; // ESTA ES LA CORRECCIÓN CLAVE
+    const originalMessageId = msg.message_id;
+
+    console.log(`[DEBUG] Chat ID extraído: ${chatId}`);
+    console.log(`[DEBUG] Message ID extraído: ${originalMessageId}`);
 
     try {
       const data = JSON.parse(msg.web_app_data.data);
+      console.log("[DEBUG] Datos parseados de web_app_data:", data);
+
       if (data.status === "success") {
+        console.log("[DEBUG] El estado es 'success'. Procediendo a borrar mensaje y enviar resumen.");
+
         if (originalMessageId) {
-          await bot.deleteMessage(chatId, originalMessageId).catch(() => {
-            // Ignorar si el mensaje ya no existe.
-          });
+          console.log(`[DEBUG] Intentando borrar mensaje con ID: ${originalMessageId} en el chat: ${chatId}`);
+          await bot
+            .deleteMessage(chatId, originalMessageId)
+            .then(() => {
+              console.log("[DEBUG] ÉXITO: El mensaje fue borrado correctamente.");
+            })
+            .catch((err) => {
+              console.error("[DEBUG] ERROR: Falló el borrado del mensaje. Razón:", err.message);
+            });
+        } else {
+          console.log("[DEBUG] ADVERTENCIA: No se encontró un 'originalMessageId' para borrar.");
         }
-        // Llamar a handleStartCommand para enviar el resumen actualizado.
+
+        console.log("[DEBUG] Llamando a handleStartCommand para enviar el resumen...");
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
+        console.log("[DEBUG] handleStartCommand fue llamado.");
+      } else {
+        console.log(`[DEBUG] El estado no es 'success', es '${data.status}'. No se hace nada.`);
       }
     } catch (error) {
-      console.error("Error procesando web_app_data:", error);
+      console.error("[DEBUG] ERROR CATASTRÓFICO en el bloque try-catch:", error);
       bot.sendMessage(chatId, "Hubo un error al guardar tu configuración.");
     }
+    console.log("--- [DEBUG] FIN DEL MANEJADOR web_app_data ---\n\n");
   });
 
   console.log("Bot de Telegram inicializado y escuchando...");
