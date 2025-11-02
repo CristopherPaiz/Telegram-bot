@@ -1,5 +1,4 @@
 import express from "express";
-import { initializeBot } from "./services/bot.service.js";
 import apiRoutes from "./routes/index.js";
 
 const app = express();
@@ -17,8 +16,6 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use("/api", apiRoutes);
-
-initializeBot();
 
 app.get("/", (req, res) => {
   res.send("El bot de ofertas está funcionando correctamente.");
