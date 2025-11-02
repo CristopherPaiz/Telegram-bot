@@ -37,12 +37,23 @@ export const initializeBot = () => {
 
   const bot = new TelegramBot(token, { polling: true });
 
+  console.log("Bot inicializado. Añadiendo listeners...");
+
+  bot.on("polling_error", (error) => {
+    console.log("\n--- [EVENTO] Polling Error Detectado ---");
+    console.log(`[POLLING_ERROR] Código: ${error.code} | Mensaje: ${error.message}`);
+  });
+
   bot.onText(/\/start/, (msg) => {
+    console.log("\n--- [EVENTO] Comando /start detectado ---");
+    console.log("[START] Objeto msg recibido:", JSON.stringify(msg, null, 2));
     delete userStates[msg.chat.id];
     handleStartCommand(bot, msg);
   });
 
   bot.onText(/\/configurar/, (msg) => {
+    console.log("\n--- [EVENTO] Comando /configurar detectado ---");
+    console.log("[CONFIGURAR] Objeto msg recibido:", JSON.stringify(msg, null, 2));
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
       parse_mode: "Markdown",
@@ -51,10 +62,12 @@ export const initializeBot = () => {
   });
 
   bot.onText(/\/cargar_ofertas/, (msg) => {
+    console.log("\n--- [EVENTO] Comando /cargar_ofertas detectado ---");
     handleCargarOfertasCommand(bot, msg);
   });
 
   bot.onText(/\/admin/, async (msg) => {
+    console.log("\n--- [EVENTO] Comando /admin detectado ---");
     const chatId = msg.chat.id;
     const usuario = await findUsuarioPorTelegramId(msg.from.id);
     if (usuario?.rol !== ROLES.ADMIN) {
@@ -67,11 +80,18 @@ export const initializeBot = () => {
   });
 
   bot.on("message", async (msg) => {
+    // Este log se disparará para CUALQUIER mensaje que no sea un comando
+    if (!msg.text || !msg.text.startsWith("/")) {
+      console.log("\n--- [EVENTO] Mensaje genérico detectado ---");
+      console.log("[MESSAGE] Objeto msg recibido:", JSON.stringify(msg, null, 2));
+    }
+
     const chatId = msg.chat.id;
     const state = userStates[chatId];
 
-    if (!state || !state.admin_action || msg.text.startsWith("/")) return;
+    if (!state || !state.admin_action || (msg.text && msg.text.startsWith("/"))) return;
 
+    console.log("[MESSAGE] El mensaje es parte de un flujo de admin. Procesando...");
     const adminId = msg.from.id;
     const adminUser = await findUsuarioPorTelegramId(adminId);
     if (adminUser?.rol !== ROLES.ADMIN) return;
@@ -101,6 +121,9 @@ export const initializeBot = () => {
   });
 
   bot.on("callback_query", async (callbackQuery) => {
+    console.log("\n--- [EVENTO] Callback Query detectado ---");
+    console.log("[CALLBACK_QUERY] Objeto callbackQuery recibido:", JSON.stringify(callbackQuery, null, 2));
+
     const msg = callbackQuery.message;
     const data = callbackQuery.data;
     const chatId = msg.chat.id;
@@ -142,50 +165,37 @@ export const initializeBot = () => {
   });
 
   bot.on("web_app_data", async (msg) => {
-    console.log("\n\n--- [DEBUG] INICIO DEL MANEJADOR web_app_data ---");
-    console.log("Objeto 'msg' completo recibido de Telegram:", JSON.stringify(msg, null, 2));
+    console.log("\n--- [EVENTO] Web App Data detectado ---");
+    console.log("[WEB_APP_DATA] Objeto msg completo recibido:", JSON.stringify(msg, null, 2));
 
     const chatId = msg.chat.id;
     const originalMessageId = msg.message_id;
 
-    console.log(`[DEBUG] Chat ID extraído: ${chatId}`);
-    console.log(`[DEBUG] Message ID extraído: ${originalMessageId}`);
+    console.log(`[WEB_APP_DATA] Chat ID extraído: ${chatId}`);
+    console.log(`[WEB_APP_DATA] Message ID extraído: ${originalMessageId}`);
 
     try {
       const data = JSON.parse(msg.web_app_data.data);
-      console.log("[DEBUG] Datos parseados de web_app_data:", data);
+      console.log("[WEB_APP_DATA] Datos parseados:", data);
 
       if (data.status === "success") {
-        console.log("[DEBUG] El estado es 'success'. Procediendo a borrar mensaje y enviar resumen.");
-
         if (originalMessageId) {
-          console.log(`[DEBUG] Intentando borrar mensaje con ID: ${originalMessageId} en el chat: ${chatId}`);
-          await bot
-            .deleteMessage(chatId, originalMessageId)
-            .then(() => {
-              console.log("[DEBUG] ÉXITO: El mensaje fue borrado correctamente.");
-            })
-            .catch((err) => {
-              console.error("[DEBUG] ERROR: Falló el borrado del mensaje. Razón:", err.message);
-            });
-        } else {
-          console.log("[DEBUG] ADVERTENCIA: No se encontró un 'originalMessageId' para borrar.");
+          console.log(`[WEB_APP_DATA] Intentando borrar mensaje ID: ${originalMessageId}`);
+          await bot.deleteMessage(chatId, originalMessageId).catch((err) => {
+            console.error("[WEB_APP_DATA] ERROR al borrar mensaje:", err.message);
+          });
         }
-
-        console.log("[DEBUG] Llamando a handleStartCommand para enviar el resumen...");
+        console.log("[WEB_APP_DATA] Llamando a handleStartCommand...");
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
-        console.log("[DEBUG] handleStartCommand fue llamado.");
-      } else {
-        console.log(`[DEBUG] El estado no es 'success', es '${data.status}'. No se hace nada.`);
+        console.log("[WEB_APP_DATA] handleStartCommand llamado.");
       }
     } catch (error) {
-      console.error("[DEBUG] ERROR CATASTRÓFICO en el bloque try-catch:", error);
+      console.error("[WEB_APP_DATA] ERROR en el manejador:", error);
       bot.sendMessage(chatId, "Hubo un error al guardar tu configuración.");
     }
-    console.log("--- [DEBUG] FIN DEL MANEJADOR web_app_data ---\n\n");
   });
 
-  console.log("Bot de Telegram inicializado y escuchando...");
+  console.log("Todos los listeners fueron añadidos. Bot escuchando...");
 
   return bot;
 };
