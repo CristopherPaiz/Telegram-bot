@@ -66,3 +66,5 @@ router.post("/usuario/:telegramId/configuracion", async (req, res) => {
     res.status(500).json({ status: "error", message: "Error al actualizar la configuración" });
   }
 });
+
+export default router;
