@@ -143,15 +143,18 @@ export const initializeBot = () => {
 
   bot.on("web_app_data", async (msg) => {
     const chatId = msg.chat.id;
+    const originalMessageId = msg.message?.message_id;
+
     try {
       const data = JSON.parse(msg.web_app_data.data);
-      if (data.status === "success") {
-        await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
+      if (data.status === "success" && originalMessageId) {
+        await bot.deleteMessage(chatId, originalMessageId).catch(() => {});
       }
     } catch (error) {
       console.error("Error procesando web_app_data:", error);
       bot.sendMessage(chatId, "Hubo un error al guardar tu configuración.");
+    } finally {
+      await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
     }
   });
 

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { obtenerCategorias, obtenerCategoriasPorUsuario, actualizarCategoriasUsuario } from "../services/categoria.service.js";
-import { findUsuarioPorTelegramId, marcarConfiguracionCompleta } from "../services/usuario.service.js";
+import { findUsuarioPorTelegramId, marcarConfiguracionCompleta, actualizarNombreUsuario } from "../services/usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerPreferencias, actualizarPreferencias } from "../services/preferencias.service.js";
 
@@ -30,11 +30,16 @@ router.get("/categorias", async (req, res) => {
 router.get("/usuario/:telegramId/preferencias", async (req, res) => {
   try {
     const { telegramId } = req.params;
-    const [preferencias, categoriasIds] = await Promise.all([obtenerPreferencias(telegramId), obtenerCategoriasPorUsuario(telegramId)]);
+    const [usuario, preferencias, categoriasIds] = await Promise.all([
+      findUsuarioPorTelegramId(telegramId),
+      obtenerPreferencias(telegramId),
+      obtenerCategoriasPorUsuario(telegramId),
+    ]);
 
     res.status(200).json({
       status: "success",
       data: {
+        nombre: usuario?.nombre || "",
         porcentajeDescuento: preferencias?.porcentaje_descuento_min || 50,
         precioMin: preferencias?.precio_min || 0,
         precioMax: preferencias?.precio_max || 10000,
@@ -49,7 +54,7 @@ router.get("/usuario/:telegramId/preferencias", async (req, res) => {
 router.post("/usuario/:telegramId/configuracion", async (req, res) => {
   try {
     const { telegramId } = req.params;
-    const { porcentajeDescuento, precioMin, precioMax, selectedIds } = req.body;
+    const { nombre, porcentajeDescuento, precioMin, precioMax, selectedIds } = req.body;
 
     const preferencias = {
       porcentaje_descuento_min: porcentajeDescuento,
@@ -57,9 +62,12 @@ router.post("/usuario/:telegramId/configuracion", async (req, res) => {
       precio_max: precioMax,
     };
 
-    await actualizarPreferencias(telegramId, preferencias);
-    await actualizarCategoriasUsuario(telegramId, selectedIds);
-    await marcarConfiguracionCompleta(telegramId);
+    await Promise.all([
+      actualizarNombreUsuario(telegramId, nombre),
+      actualizarPreferencias(telegramId, preferencias),
+      actualizarCategoriasUsuario(telegramId, selectedIds),
+      marcarConfiguracionCompleta(telegramId),
+    ]);
 
     res.status(200).json({ status: "success", message: "Configuración actualizada correctamente" });
   } catch (error) {

@@ -47,3 +47,15 @@ export const marcarConfiguracionCompleta = async (telegramId) => {
     throw new Error("No se pudo actualizar el estado del usuario.");
   }
 };
+
+export const actualizarNombreUsuario = async (telegramId, nombre) => {
+  try {
+    await turso.execute({
+      sql: "UPDATE Usuarios SET nombre = ? WHERE telegram_id = ?;",
+      args: [nombre, telegramId],
+    });
+  } catch (error) {
+    console.error("Error al actualizar el nombre del usuario:", error);
+    throw new Error("No se pudo actualizar el nombre del usuario.");
+  }
+};
