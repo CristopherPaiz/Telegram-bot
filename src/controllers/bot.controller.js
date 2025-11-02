@@ -34,18 +34,18 @@ export const handleStartCommand = async (bot, msg) => {
       ]);
 
       let mensaje = `¡Hola de nuevo, *${usuarioTelegram.first_name}*! 🎉\n\n`;
-      mensaje += `Tus preferencias actuales:\n\n`;
+      mensaje += `Aquí está el resumen de tu configuración actual:\n\n`;
       mensaje += `📉 *Descuento mínimo:* ${preferencias.porcentaje_descuento_min}%\n`;
-      const precioMaxTexto = preferencias.precio_max === 999999 ? "Sin límite" : `Q${preferencias.precio_max}`;
+      const precioMaxTexto = preferencias.precio_max >= 10000 ? "Sin límite" : `Q${preferencias.precio_max}`;
       mensaje += `💰 *Rango de precios:* Q${preferencias.precio_min} - ${precioMaxTexto}\n`;
 
       const nombresCategorias = todasCategorias
         .filter((cat) => categoriasSeleccionadasIds.has(cat.id))
-        .map((cat) => `${cat.emoji} ${cat.nombre}`)
+        .map((cat) => `${cat.emoji || ""} ${cat.nombre}`)
         .join(", ");
 
       mensaje += `🏷️ *Categorías:* ${nombresCategorias || "Ninguna seleccionada"}\n\n`;
-      mensaje += `Recuerda que en el menú puedes ajustar tus preferencias en cualquier momento usando /configurar.\n\n¡Feliz caza de ofertas! 🛍️`;
+      mensaje += `Puedes ajustar esto en cualquier momento usando /configurar.`;
 
       bot.sendMessage(chatId, mensaje, { ...menuPrincipalSimplificadoOptions, parse_mode: "Markdown" });
     }

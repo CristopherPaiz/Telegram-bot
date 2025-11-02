@@ -1,7 +1,8 @@
 import { Router } from "express";
-import { obtenerCategorias, obtenerCategoriasPorUsuario, crearCategoria, actualizarCategoriasUsuario } from "../services/categoria.service.js";
-import { findUsuarioPorTelegramId } from "../services/usuario.service.js";
+import { obtenerCategorias, obtenerCategoriasPorUsuario, actualizarCategoriasUsuario } from "../services/categoria.service.js";
+import { findUsuarioPorTelegramId, marcarConfiguracionCompleta } from "../services/usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
+import { obtenerPreferencias, actualizarPreferencias } from "../services/preferencias.service.js";
 
 const router = Router();
 
@@ -26,34 +27,42 @@ router.get("/categorias", async (req, res) => {
   }
 });
 
-router.post("/categorias", isAdmin, async (req, res) => {
+router.get("/usuario/:telegramId/preferencias", async (req, res) => {
   try {
-    const nuevaCategoria = await crearCategoria(req.body);
-    res.status(201).json({ status: "success", data: { categoria: nuevaCategoria } });
+    const { telegramId } = req.params;
+    const [preferencias, categoriasIds] = await Promise.all([obtenerPreferencias(telegramId), obtenerCategoriasPorUsuario(telegramId)]);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        porcentajeDescuento: preferencias?.porcentaje_descuento_min || 50,
+        precioMin: preferencias?.precio_min || 0,
+        precioMax: preferencias?.precio_max || 10000,
+        selectedIds: Array.from(categoriasIds),
+      },
+    });
   } catch (error) {
-    res.status(500).json({ status: "error", message: error.message });
+    res.status(500).json({ status: "error", message: "Error al obtener las preferencias del usuario" });
   }
 });
 
-router.get("/usuario/:telegramId/categorias", async (req, res) => {
+router.post("/usuario/:telegramId/configuracion", async (req, res) => {
   try {
     const { telegramId } = req.params;
-    const categoriasIds = await obtenerCategoriasPorUsuario(telegramId);
-    res.status(200).json({ status: "success", data: { selectedIds: Array.from(categoriasIds) } });
-  } catch (error) {
-    res.status(500).json({ status: "error", message: "Error al obtener las categorías del usuario" });
-  }
-});
+    const { porcentajeDescuento, precioMin, precioMax, selectedIds } = req.body;
 
-router.post("/usuario/:telegramId/categorias", async (req, res) => {
-  try {
-    const { telegramId } = req.params;
-    const { selectedIds } = req.body;
+    const preferencias = {
+      porcentaje_descuento_min: porcentajeDescuento,
+      precio_min: precioMin,
+      precio_max: precioMax,
+    };
+
+    await actualizarPreferencias(telegramId, preferencias);
     await actualizarCategoriasUsuario(telegramId, selectedIds);
-    res.status(200).json({ status: "success", message: "Preferencias actualizadas" });
+    await marcarConfiguracionCompleta(telegramId);
+
+    res.status(200).json({ status: "success", message: "Configuración actualizada correctamente" });
   } catch (error) {
-    res.status(500).json({ status: "error", message: "Error al actualizar las preferencias" });
+    res.status(500).json({ status: "error", message: "Error al actualizar la configuración" });
   }
 });
-
-export default router;

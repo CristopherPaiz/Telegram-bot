@@ -1,7 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import "dotenv/config";
 import { handleStartCommand, handleCargarOfertasCommand } from "../controllers/bot.controller.js";
-import { actualizarPreferencias } from "./preferencias.service.js";
 import { findUsuarioPorTelegramId, marcarConfiguracionCompleta } from "./usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerCategorias, crearCategoria } from "./categoria.service.js";
@@ -11,69 +10,10 @@ const miniAppUrl = process.env.MINI_APP_URL;
 
 const userStates = {};
 
-const menuConfiguracionOptions = (haHechoCambios) => ({
+const menuConfiguracionOptions = {
   reply_markup: {
-    inline_keyboard: [
-      [{ text: "📉 Porcentaje de Descuento", callback_data: "config_descuento" }],
-      [{ text: "💰 Rango de Precios", callback_data: "config_precios" }],
-      [{ text: "🏷️ Categorías (App)", web_app: { url: miniAppUrl } }],
-      [{ text: haHechoCambios ? "✅ ¡Listo! Guardar y Terminar" : "✅ Terminar con valores por defecto", callback_data: "terminar_config" }],
-    ],
+    inline_keyboard: [[{ text: "🛠️ Abrir Configuración", web_app: { url: miniAppUrl } }]],
   },
-});
-
-const menuDescuentoOptions = {
-  reply_markup: {
-    inline_keyboard: [
-      [
-        { text: "10%+", callback_data: "set_desc_10" },
-        { text: "25%+", callback_data: "set_desc_25" },
-        { text: "40%+", callback_data: "set_desc_40" },
-      ],
-      [
-        { text: "50%+", callback_data: "set_desc_50" },
-        { text: "70%+", callback_data: "set_desc_70" },
-        { text: "Cualquiera", callback_data: "set_desc_0" },
-      ],
-      [{ text: "🔙 Volver", callback_data: "configurar_preferencias" }],
-    ],
-  },
-};
-
-const preciosMinimos = [0, 100, 250, 500, 1000, 2000];
-const preciosMaximosBase = [250, 500, 1000, 2000, 5000, 10000, 20000, 999999];
-
-const generarMenuPrecioMin = () => ({
-  reply_markup: {
-    inline_keyboard: [
-      preciosMinimos.map((precio) => ({
-        text: `Q${precio}`,
-        callback_data: `set_precio_min_${precio}`,
-      })),
-      [{ text: "🔙 Volver", callback_data: "configurar_preferencias" }],
-    ],
-  },
-});
-
-const generarMenuPrecioMax = (precioMin) => {
-  const opcionesMax = preciosMaximosBase.filter((pMax) => pMax > precioMin);
-  const teclado = [];
-  let fila = [];
-  for (const precio of opcionesMax) {
-    fila.push({
-      text: precio === 999999 ? "Sin límite" : `Q${precio}`,
-      callback_data: `set_precio_max_${precio}`,
-    });
-    if (fila.length === 3) {
-      teclado.push([...fila]);
-      fila = [];
-    }
-  }
-  if (fila.length > 0) {
-    teclado.push(fila);
-  }
-  teclado.push([{ text: "🔙 Volver", callback_data: "config_precios" }]);
-  return { reply_markup: { inline_keyboard: teclado } };
 };
 
 const menuAdminOptions = {
@@ -104,11 +44,9 @@ export const initializeBot = () => {
 
   bot.onText(/\/configurar/, (msg) => {
     const chatId = msg.chat.id;
-    delete userStates[chatId];
-    userStates[chatId] = { haHechoCambios: true };
-    bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nSelecciona la preferencia que deseas ajustar.", {
+    bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
       parse_mode: "Markdown",
-      ...menuConfiguracionOptions(true),
+      ...menuConfiguracionOptions,
     });
   });
 
@@ -166,7 +104,6 @@ export const initializeBot = () => {
     const msg = callbackQuery.message;
     const data = callbackQuery.data;
     const chatId = msg.chat.id;
-    const fromId = callbackQuery.from.id;
 
     bot.answerCallbackQuery(callbackQuery.id);
 
@@ -195,77 +132,8 @@ export const initializeBot = () => {
       }
 
       if (data === "configurar_preferencias") {
-        if (!userStates[chatId]) userStates[chatId] = {};
-        const haHechoCambios = userStates[chatId]?.haHechoCambios || false;
-        bot.editMessageText("Aquí puedes ajustar tus preferencias. Cuando termines, pulsa 'Terminar'.", {
-          chat_id: chatId,
-          message_id: msg.message_id,
-          ...menuConfiguracionOptions(haHechoCambios),
-        });
-      } else if (data === "terminar_config") {
-        if (!userStates[chatId]?.haHechoCambios) {
-          bot.sendMessage(
-            chatId,
-            "👍 ¡Entendido! Hemos establecido las preferencias por defecto por ti.\n\nRecuerda que puedes cambiarlas cuando quieras usando el comando /configurar."
-          );
-        }
-        await marcarConfiguracionCompleta(fromId);
-        bot.deleteMessage(chatId, msg.message_id).catch(() => {});
-        delete userStates[chatId];
-        await handleStartCommand(bot, { ...msg, from: callbackQuery.from });
-      } else if (data === "config_descuento") {
-        bot.editMessageText("📉 Elige el *descuento mínimo* que te interesa:", {
-          chat_id: chatId,
-          message_id: msg.message_id,
-          parse_mode: "Markdown",
-          ...menuDescuentoOptions,
-        });
-      } else if (data.startsWith("set_desc_")) {
-        userStates[chatId] = { ...userStates[chatId], haHechoCambios: true };
-        const descuento = parseInt(data.replace("set_desc_", ""), 10);
-        await actualizarPreferencias(fromId, { porcentaje_descuento_min: descuento });
-        bot.editMessageText(`✅ Descuento fijado en *${descuento}%*.\n\nPuedes ajustar otro valor o terminar la configuración.`, {
-          chat_id: chatId,
-          message_id: msg.message_id,
-          parse_mode: "Markdown",
-          ...menuConfiguracionOptions(true),
-        });
-      } else if (data === "config_precios") {
-        userStates[chatId] = { ...userStates[chatId], a_espera_de: "precio_max" };
-        bot.editMessageText("💰 Primero, elige un *precio mínimo*:", {
-          chat_id: chatId,
-          message_id: msg.message_id,
-          parse_mode: "Markdown",
-          ...generarMenuPrecioMin(),
-        });
-      } else if (data.startsWith("set_precio_min_")) {
-        const precioMin = parseInt(data.replace("set_precio_min_", ""), 10);
-        userStates[chatId].precioMin = precioMin;
-        bot.editMessageText(`Mínimo: *Q${precioMin}*.\n\nAhora, elige un *precio máximo*:`, {
-          chat_id: chatId,
-          message_id: msg.message_id,
-          parse_mode: "Markdown",
-          ...generarMenuPrecioMax(precioMin),
-        });
-      } else if (data.startsWith("set_precio_max_")) {
-        userStates[chatId] = { ...userStates[chatId], haHechoCambios: true };
-        const precioMax = parseInt(data.replace("set_precio_max_", ""), 10);
-        const precioMin = userStates[chatId]?.precioMin;
-
-        if (typeof precioMin !== "number") {
-          bot.sendMessage(chatId, "Hubo un error, por favor empieza de nuevo desde /configurar.");
-          return;
-        }
-
-        await actualizarPreferencias(fromId, { precio_min: precioMin, precio_max: precioMax });
-        delete userStates[chatId].precioMin;
-        const precioMaxTexto = precioMax === 999999 ? "Sin límite" : `Q${precioMax}`;
-        bot.editMessageText(`✅ Rango de precios fijado en *Q${precioMin} - ${precioMaxTexto}*.\n\nPuedes ajustar otro valor o terminar.`, {
-          chat_id: chatId,
-          message_id: msg.message_id,
-          parse_mode: "Markdown",
-          ...menuConfiguracionOptions(true),
-        });
+        await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+        await bot.sendMessage(chatId, "Pulsa el botón a continuación para configurar tus preferencias.", menuConfiguracionOptions);
       }
     } catch (error) {
       console.error("Error procesando callback_query:", error);
@@ -277,13 +145,13 @@ export const initializeBot = () => {
     const chatId = msg.chat.id;
     try {
       const data = JSON.parse(msg.web_app_data.data);
-      if (data.status === "ok") {
-        userStates[chatId] = { ...userStates[chatId], haHechoCambios: true };
-        bot.sendMessage(chatId, `✅ ¡Tus categorías han sido guardadas con éxito!`);
+      if (data.status === "success") {
+        await bot.sendMessage(chatId, `✅ ¡Tu configuración ha sido guardada con éxito!`);
+        await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
       }
     } catch (error) {
       console.error("Error procesando web_app_data:", error);
-      bot.sendMessage(chatId, "Hubo un error al guardar tus categorías.");
+      bot.sendMessage(chatId, "Hubo un error al guardar tu configuración.");
     }
   });
 
