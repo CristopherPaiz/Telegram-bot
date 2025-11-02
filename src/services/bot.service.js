@@ -1,9 +1,10 @@
 import TelegramBot from "node-telegram-bot-api";
 import "dotenv/config";
 import { handleStartCommand, handleCargarOfertasCommand } from "../controllers/bot.controller.js";
-import { findUsuarioPorTelegramId } from "./usuario.service.js";
+import { findUsuarioPorTelegramId, actualizarNombreUsuario, marcarConfiguracionCompleta } from "./usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
-import { obtenerCategorias, crearCategoria } from "./categoria.service.js";
+import { obtenerCategorias, crearCategoria, actualizarCategoriasUsuario } from "./categoria.service.js";
+import { actualizarPreferencias } from "./preferencias.service.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const miniAppUrl = process.env.MINI_APP_URL;
@@ -37,23 +38,16 @@ export const initializeBot = () => {
 
   const bot = new TelegramBot(token, { polling: true });
 
-  console.log("Bot inicializado. Añadiendo listeners...");
-
   bot.on("polling_error", (error) => {
-    console.log("\n--- [EVENTO] Polling Error Detectado ---");
     console.log(`[POLLING_ERROR] Código: ${error.code} | Mensaje: ${error.message}`);
   });
 
   bot.onText(/\/start/, (msg) => {
-    console.log("\n--- [EVENTO] Comando /start detectado ---");
-    console.log("[START] Objeto msg recibido:", JSON.stringify(msg, null, 2));
     delete userStates[msg.chat.id];
     handleStartCommand(bot, msg);
   });
 
   bot.onText(/\/configurar/, (msg) => {
-    console.log("\n--- [EVENTO] Comando /configurar detectado ---");
-    console.log("[CONFIGURAR] Objeto msg recibido:", JSON.stringify(msg, null, 2));
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
       parse_mode: "Markdown",
@@ -62,12 +56,10 @@ export const initializeBot = () => {
   });
 
   bot.onText(/\/cargar_ofertas/, (msg) => {
-    console.log("\n--- [EVENTO] Comando /cargar_ofertas detectado ---");
     handleCargarOfertasCommand(bot, msg);
   });
 
   bot.onText(/\/admin/, async (msg) => {
-    console.log("\n--- [EVENTO] Comando /admin detectado ---");
     const chatId = msg.chat.id;
     const usuario = await findUsuarioPorTelegramId(msg.from.id);
     if (usuario?.rol !== ROLES.ADMIN) {
@@ -80,22 +72,12 @@ export const initializeBot = () => {
   });
 
   bot.on("message", async (msg) => {
-    // Este log se disparará para CUALQUIER mensaje que no sea un comando
-    if (!msg.text || !msg.text.startsWith("/")) {
-      console.log("\n--- [EVENTO] Mensaje genérico detectado ---");
-      console.log("[MESSAGE] Objeto msg recibido:", JSON.stringify(msg, null, 2));
-    }
-
     const chatId = msg.chat.id;
     const state = userStates[chatId];
-
     if (!state || !state.admin_action || (msg.text && msg.text.startsWith("/"))) return;
-
-    console.log("[MESSAGE] El mensaje es parte de un flujo de admin. Procesando...");
     const adminId = msg.from.id;
     const adminUser = await findUsuarioPorTelegramId(adminId);
     if (adminUser?.rol !== ROLES.ADMIN) return;
-
     try {
       if (state.admin_action === "add_cat_name") {
         userStates[chatId] = { admin_action: "add_cat_emoji", nombre: msg.text };
@@ -103,12 +85,9 @@ export const initializeBot = () => {
       } else if (state.admin_action === "add_cat_emoji") {
         const emoji = msg.text.toLowerCase() === "no" ? null : msg.text;
         userStates[chatId] = { admin_action: "add_cat_parent", nombre: state.nombre, emoji };
-
         const categorias = await obtenerCategorias();
         const teclado = categorias.filter((c) => !c.padre_id).map((c) => [{ text: c.nombre, callback_data: `set_parent_${c.id}` }]);
-
         teclado.unshift([{ text: " ninguna (es categoría principal)", callback_data: "set_parent_null" }]);
-
         bot.sendMessage(chatId, "✨ Emoji guardado. ¿Esta es una subcategoría de alguna de las siguientes?", {
           reply_markup: { inline_keyboard: teclado },
         });
@@ -121,30 +100,21 @@ export const initializeBot = () => {
   });
 
   bot.on("callback_query", async (callbackQuery) => {
-    console.log("\n--- [EVENTO] Callback Query detectado ---");
-    console.log("[CALLBACK_QUERY] Objeto callbackQuery recibido:", JSON.stringify(callbackQuery, null, 2));
-
     const msg = callbackQuery.message;
     const data = callbackQuery.data;
     const chatId = msg.chat.id;
-
     bot.answerCallbackQuery(callbackQuery.id);
-
     try {
       if (data === "admin_add_cat") {
         userStates[chatId] = { admin_action: "add_cat_name" };
         return bot.sendMessage(chatId, "✏️ Introduce el nombre para la nueva categoría:");
       }
-
       if (data.startsWith("set_parent_")) {
         const state = userStates[chatId];
         if (!state || state.admin_action !== "add_cat_parent") return;
-
         const padre_id = data === "set_parent_null" ? null : parseInt(data.replace("set_parent_", ""), 10);
         const { nombre, emoji } = state;
-
         await crearCategoria({ nombre, emoji, padre_id });
-
         bot.editMessageText(`✅ ¡Categoría "*${nombre}*" creada con éxito!`, {
           chat_id: chatId,
           message_id: msg.message_id,
@@ -153,7 +123,6 @@ export const initializeBot = () => {
         delete userStates[chatId];
         return;
       }
-
       if (data === "configurar_preferencias") {
         await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
         await bot.sendMessage(chatId, "Pulsa el botón a continuación para configurar tus preferencias.", menuConfiguracionOptions);
@@ -165,37 +134,66 @@ export const initializeBot = () => {
   });
 
   bot.on("web_app_data", async (msg) => {
-    console.log("\n--- [EVENTO] Web App Data detectado ---");
-    console.log("[WEB_APP_DATA] Objeto msg completo recibido:", JSON.stringify(msg, null, 2));
+    console.log("\n\n--- [BOT LOG] INICIO: Evento 'web_app_data' recibido ---");
+    console.log("[BOT LOG] Objeto 'msg' completo:", JSON.stringify(msg, null, 2));
 
     const chatId = msg.chat.id;
     const originalMessageId = msg.message_id;
+    const telegramId = msg.from.id;
 
-    console.log(`[WEB_APP_DATA] Chat ID extraído: ${chatId}`);
-    console.log(`[WEB_APP_DATA] Message ID extraído: ${originalMessageId}`);
+    console.log(`[BOT LOG] Datos extraídos: chatId=${chatId}, messageId=${originalMessageId}, telegramId=${telegramId}`);
 
     try {
       const data = JSON.parse(msg.web_app_data.data);
-      console.log("[WEB_APP_DATA] Datos parseados:", data);
+      console.log("[BOT LOG] Datos de la Mini App parseados:", data);
 
-      if (data.status === "success") {
+      if (data.type === "save_configuration" && data.payload) {
+        console.log("[BOT LOG] Tipo de evento 'save_configuration' confirmado. Procediendo...");
+        const { nombre, porcentajeDescuento, precioMin, precioMax, selectedIds } = data.payload;
+
+        const preferencias = {
+          porcentaje_descuento_min: porcentajeDescuento,
+          precio_min: precioMin,
+          precio_max: precioMax,
+        };
+
+        console.log("[BOT LOG] PASO 1: Guardando toda la configuración en la base de datos...");
+        await Promise.all([
+          actualizarNombreUsuario(telegramId, nombre),
+          actualizarPreferencias(telegramId, preferencias),
+          actualizarCategoriasUsuario(telegramId, selectedIds),
+          marcarConfiguracionCompleta(telegramId),
+        ]);
+        console.log("[BOT LOG] PASO 1 COMPLETADO: La configuración se ha guardado en la BD.");
+
         if (originalMessageId) {
-          console.log(`[WEB_APP_DATA] Intentando borrar mensaje ID: ${originalMessageId}`);
-          await bot.deleteMessage(chatId, originalMessageId).catch((err) => {
-            console.error("[WEB_APP_DATA] ERROR al borrar mensaje:", err.message);
-          });
+          console.log(`[BOT LOG] PASO 2: Intentando borrar el mensaje de configuración (ID: ${originalMessageId})...`);
+          await bot
+            .deleteMessage(chatId, originalMessageId)
+            .then(() => {
+              console.log("[BOT LOG] PASO 2 COMPLETADO: Mensaje borrado con éxito.");
+            })
+            .catch((err) => {
+              console.error("[BOT LOG] FALLO EN PASO 2: No se pudo borrar el mensaje. Razón:", err.message);
+            });
+        } else {
+          console.warn("[BOT LOG] ADVERTENCIA EN PASO 2: No se encontró un message_id para borrar.");
         }
-        console.log("[WEB_APP_DATA] Llamando a handleStartCommand...");
+
+        console.log("[BOT LOG] PASO 3: Enviando el resumen de la configuración actualizada...");
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
-        console.log("[WEB_APP_DATA] handleStartCommand llamado.");
+        console.log("[BOT LOG] PASO 3 COMPLETADO: Resumen enviado.");
+      } else {
+        console.warn("[BOT LOG] ADVERTENCIA: Se recibió un evento 'web_app_data' pero no era del tipo 'save_configuration' o no tenía payload.");
       }
     } catch (error) {
-      console.error("[WEB_APP_DATA] ERROR en el manejador:", error);
-      bot.sendMessage(chatId, "Hubo un error al guardar tu configuración.");
+      console.error("[BOT LOG] ERROR FATAL en el manejador 'web_app_data':", error);
+      bot.sendMessage(chatId, "Hubo un error crítico al procesar tu configuración.");
     }
+    console.log("--- [BOT LOG] FIN: Evento 'web_app_data' procesado ---\n\n");
   });
 
-  console.log("Todos los listeners fueron añadidos. Bot escuchando...");
+  console.log("Bot de Telegram inicializado y escuchando...");
 
   return bot;
 };
