@@ -1,89 +1,120 @@
+import turso from "../config/turso.js";
 import fetch from "node-fetch";
 
-export const ejecutarScraping = async (fuente) => {
+const guardarOfertasEnBD = async (ofertas, fuenteId) => {
+  if (!ofertas || ofertas.length === 0) return;
+
+  console.log(`[SCRAPER] Guardando ${ofertas.length} ofertas en BD para fuente ${fuenteId}...`);
+
   try {
-    console.log(`[SCRAPER] Iniciando scraping de: ${fuente.nombre}`);
+    const placeholders = ofertas.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)").join(", ");
+    const args = ofertas.flatMap((o) => [
+      fuenteId,
+      o.titulo,
+      o.descripcion || null,
+      o.precio_normal || null,
+      o.precio_oferta,
+      o.porcentaje,
+      o.imagen || null,
+      o.enlace,
+      o.categoria || null,
+    ]);
 
-    const options = {
-      method: fuente.metodo || "GET",
-      headers: fuente.headers ? JSON.parse(fuente.headers) : {},
-    };
+    // Usamos ON CONFLICT para actualizar la fecha de captura y precio si ya existe
+    await turso.execute({
+      sql: `
+        INSERT INTO Ofertas (fuente_id, titulo, descripcion, precio_normal, precio_oferta, porcentaje_descuento, imagen, enlace, categoria, fecha_captura)
+        VALUES ${placeholders}
+        ON CONFLICT(enlace) DO UPDATE SET
+          precio_oferta = excluded.precio_oferta,
+          porcentaje_descuento = excluded.porcentaje_descuento,
+          fecha_captura = CURRENT_TIMESTAMP;
+      `,
+      args,
+    });
+    console.log(`[SCRAPER] Ofertas guardadas/actualizadas en BD.`);
+  } catch (error) {
+    console.error(`[SCRAPER ERROR] Fallo al guardar ofertas en BD:`, error);
+  }
+};
 
-    if (fuente.metodo === "POST" && fuente.body_config) {
-      options.body = fuente.body_config; // Aquí podríamos inyectar variables dinámicas si fuera necesario
+export const ejecutarScraping = async (fuente) => {
+  console.log(`[SCRAPER] Iniciando scraping de: ${fuente.nombre}`);
+  try {
+    let data;
+
+    // 1. Obtener datos según el método
+    if (fuente.metodo === "GET") {
+      const response = await fetch(fuente.url, {
+        headers: fuente.headers ? JSON.parse(fuente.headers) : {},
+      });
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      data = await response.json(); // Asumimos JSON por ahora
+    } else if (fuente.metodo === "POST") {
+      const response = await fetch(fuente.url, {
+        method: "POST",
+        headers: fuente.headers ? JSON.parse(fuente.headers) : {},
+        body: fuente.body_config,
+      });
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      data = await response.json();
     }
 
-    const response = await fetch(fuente.url, options);
+    // 2. Mapear campos
+    const mapeo = JSON.parse(fuente.mapeo_campos);
+    let items = data;
 
-    if (!response.ok) {
-      throw new Error(`Error HTTP: ${response.status}`);
+    // Navegar hasta el array de items si es necesario (ej: data.results)
+    const rootPath = mapeo.root_path || mapeo.lista; // Compatibilidad con ambos nombres
+    if (rootPath) {
+      const parts = rootPath.split(".");
+      for (const part of parts) {
+        items = items[part];
+      }
     }
 
-    if (fuente.tipo_respuesta === "JSON") {
-      const data = await response.json();
-      return procesarRespuestaJson(data, JSON.parse(fuente.mapeo_campos));
-    } else {
-      // TODO: Implementar HTML parsing con cheerio/jsdom
-      console.warn(`[SCRAPER] Tipo de respuesta ${fuente.tipo_respuesta} no soportado aún.`);
+    if (!Array.isArray(items)) {
+      console.warn(`[SCRAPER] La respuesta de ${fuente.nombre} no es un array en la ruta especificada.`);
       return [];
     }
-  } catch (error) {
-    console.error(`[SCRAPER] Error al scrapear ${fuente.nombre}:`, error);
-    return [];
-  }
-};
 
-const procesarRespuestaJson = (data, mapeo) => {
-  try {
-    // Navegar hasta la lista de items usando "lista": "Response.Articulos"
-    const rutaLista = mapeo.lista.split(".");
-    let items = data;
-    for (const key of rutaLista) {
-      if (items[key]) {
-        items = items[key];
-      } else {
-        return [];
-      }
-    }
-
-    if (!Array.isArray(items)) return [];
-
-    return items.map((item) => {
-      // Extraer campos básicos
-      const oferta = {
-        id: obtenerValor(item, mapeo.id),
-        titulo: obtenerValor(item, mapeo.titulo),
-        descripcion: obtenerValor(item, mapeo.descripcion),
-        precio_oferta: parseFloat(obtenerValor(item, mapeo.precio_oferta)),
-        precio_normal: parseFloat(obtenerValor(item, mapeo.precio_normal)),
-        imagen: obtenerValor(item, mapeo.imagen),
-        categoria: obtenerValor(item, mapeo.categoria),
-        enlace: mapeo.link_base ? `${mapeo.link_base}${obtenerValor(item, mapeo.id)}` : "#",
+    const ofertas = items.map((item) => {
+      // Helper para obtener valor anidado
+      const getValue = (obj, path) => {
+        if (!path) return null;
+        return path.split(".").reduce((o, p) => (o ? o[p] : null), obj);
       };
 
-      // Calcular porcentaje si no viene
-      if (!oferta.porcentaje && oferta.precio_normal > 0) {
-        oferta.porcentaje = Math.round(((oferta.precio_normal - oferta.precio_oferta) / oferta.precio_normal) * 100);
+      const precioNormal = parseFloat(getValue(item, mapeo.precio_normal));
+      const precioOferta = parseFloat(getValue(item, mapeo.precio_oferta));
+
+      // Calcular porcentaje si no viene explícito
+      let porcentaje = 0;
+      if (mapeo.porcentaje_descuento) {
+        porcentaje = parseInt(getValue(item, mapeo.porcentaje_descuento));
+      } else if (precioNormal && precioOferta) {
+        porcentaje = Math.round(((precioNormal - precioOferta) / precioNormal) * 100);
       }
 
-      return oferta;
+      return {
+        id: getValue(item, mapeo.id), // ID externo
+        titulo: getValue(item, mapeo.titulo),
+        descripcion: getValue(item, mapeo.descripcion),
+        precio_normal: precioNormal,
+        precio_oferta: precioOferta,
+        imagen: getValue(item, mapeo.imagen),
+        categoria: getValue(item, mapeo.categoria),
+        enlace: getValue(item, mapeo.enlace) || fuente.url, // Fallback a URL base si no hay enlace específico
+        porcentaje: porcentaje,
+      };
     });
+
+    // 3. Guardar en BD (Side effect)
+    await guardarOfertasEnBD(ofertas, fuente.id);
+
+    return ofertas;
   } catch (error) {
-    console.error("[SCRAPER] Error procesando JSON:", error);
+    console.error(`[SCRAPER ERROR] ${fuente.nombre}:`, error.message);
     return [];
   }
-};
-
-const obtenerValor = (obj, ruta) => {
-  if (!ruta) return null;
-  const keys = ruta.split(".");
-  let val = obj;
-  for (const key of keys) {
-    if (val && val[key] !== undefined) {
-      val = val[key];
-    } else {
-      return null;
-    }
-  }
-  return val;
 };
