@@ -86,6 +86,9 @@ export const handleVerOfertasAhora = async (bot, msg) => {
   bot.sendMessage(chatId, "🔎 Buscando las mejores ofertas para ti... dame unos segundos.");
 
   try {
+    // Aseguramos que el usuario exista en la BD antes de buscar (evita error de FK en preferencias)
+    await registrarOActualizarUsuario(msg.from);
+
     const ofertas = await cargarOfertas(telegramId);
 
     if (ofertas.length === 0) {
