@@ -7,10 +7,11 @@ import {
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerPreferencias } from "../services/preferencias.service.js";
 import { obtenerCategorias, obtenerCategoriasPorUsuario } from "../services/categoria.service.js";
+import { cargarOfertas } from "../services/ofertas.service.js";
 
 const menuPrincipalSimplificadoOptions = {
   reply_markup: {
-    remove_keyboard: true,
+    inline_keyboard: [[{ text: "🔎 Ver Ofertas Ahora", callback_data: "ver_ofertas_ahora" }]],
   },
 };
 
@@ -53,7 +54,7 @@ export const handleStartCommand = async (bot, msg) => {
         .join(", ");
 
       mensaje += `🏷️ *Categorías:* ${nombresCategorias || "Ninguna seleccionada"}\n\n`;
-      mensaje += `Puedes ajustar esto en cualquier momento usando /configurar.`;
+      mensaje += `Puedes ajustar esto en cualquier momento entrando al menu y presionando el boton de configuración.`;
 
       // Limpieza de mensaje anterior de resumen
       const lastSummaryId = await obtenerLastSummaryMessageId(usuarioTelegram.id);
@@ -78,7 +79,49 @@ export const handleStartCommand = async (bot, msg) => {
   }
 };
 
+export const handleVerOfertasAhora = async (bot, msg) => {
+  const chatId = msg.chat.id;
+  const telegramId = msg.from.id;
+
+  bot.sendMessage(chatId, "🔎 Buscando las mejores ofertas para ti... dame unos segundos.");
+
+  try {
+    const ofertas = await cargarOfertas(telegramId);
+
+    if (ofertas.length === 0) {
+      return bot.sendMessage(chatId, "😔 No encontré ofertas que coincidan con tus filtros en este momento.");
+    }
+
+    // Enviar las primeras 5 ofertas para no saturar
+    const topOfertas = ofertas.slice(0, 5);
+
+    for (const oferta of topOfertas) {
+      const caption =
+        `🔥 *${oferta.titulo}*\n\n` +
+        `💵 Precio Oferta: *Q${oferta.precio_oferta}*\n` +
+        `❌ Precio Normal: ~Q${oferta.precio_normal}~\n` +
+        `📉 Descuento: *${oferta.porcentaje}% OFF*\n\n` +
+        `[Ver en Tienda](${oferta.enlace})`;
+
+      if (oferta.imagen) {
+        await bot.sendPhoto(chatId, oferta.imagen, { caption, parse_mode: "Markdown" });
+      } else {
+        await bot.sendMessage(chatId, caption, { parse_mode: "Markdown" });
+      }
+    }
+
+    if (ofertas.length > 5) {
+      bot.sendMessage(chatId, `... y ${ofertas.length - 5} ofertas más encontradas.`);
+    }
+  } catch (error) {
+    console.error("Error al buscar ofertas:", error);
+    bot.sendMessage(chatId, "❌ Ocurrió un error al buscar ofertas.");
+  }
+};
+
 export const handleCargarOfertasCommand = async (bot, msg) => {
+  // ... (código existente)
+
   const chatId = msg.chat.id;
   const telegramId = msg.from.id;
 

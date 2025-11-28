@@ -149,6 +149,11 @@ export const initializeBot = () => {
         await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
         await bot.sendMessage(chatId, "Pulsa el botón a continuación para configurar tus preferencias.", menuConfiguracionOptions);
       }
+      if (data === "ver_ofertas_ahora") {
+        // Importamos dinámicamente para evitar ciclos o lo movemos arriba si es posible
+        const { handleVerOfertasAhora } = await import("../controllers/bot.controller.js");
+        await handleVerOfertasAhora(bot, msg);
+      }
     } catch (error) {
       console.error("Error procesando callback_query:", error);
       bot.sendMessage(chatId, "Ocurrió un error al procesar tu selección. Inténtalo de nuevo.");

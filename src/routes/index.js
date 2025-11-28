@@ -54,4 +54,46 @@ router.get("/usuario/:telegramId/preferencias", async (req, res) => {
 
 router.post("/usuario/:telegramId/configuracion", guardarConfiguracion);
 
+// --- RUTAS DE FUENTES ---
+
+// Obtener todas las fuentes disponibles
+router.get("/fuentes", async (req, res) => {
+  try {
+    const { obtenerFuentes } = await import("../services/fuentes.service.js");
+    const fuentes = await obtenerFuentes();
+    res.json({ status: "success", data: fuentes });
+  } catch (error) {
+    console.error("Error al obtener fuentes:", error);
+    res.status(500).json({ status: "error", message: "Error interno" });
+  }
+});
+
+// Obtener fuentes seleccionadas por un usuario
+router.get("/usuario/:telegramId/fuentes", async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const { obtenerFuentesPorUsuario } = await import("../services/fuentes.service.js");
+    const fuentes = await obtenerFuentesPorUsuario(telegramId);
+    res.json({ status: "success", data: fuentes });
+  } catch (error) {
+    console.error("Error al obtener fuentes del usuario:", error);
+    res.status(500).json({ status: "error", message: "Error interno" });
+  }
+});
+
+// Actualizar fuentes seleccionadas por un usuario
+router.post("/usuario/:telegramId/fuentes", async (req, res) => {
+  try {
+    const { telegramId } = req.params;
+    const { fuentesIds } = req.body; // Array de IDs [1, 2, ...]
+    const { actualizarFuentesUsuario } = await import("../services/fuentes.service.js");
+
+    await actualizarFuentesUsuario(telegramId, fuentesIds);
+    res.json({ status: "success", message: "Fuentes actualizadas correctamente" });
+  } catch (error) {
+    console.error("Error al actualizar fuentes del usuario:", error);
+    res.status(500).json({ status: "error", message: "Error interno" });
+  }
+});
+
 export default router;
