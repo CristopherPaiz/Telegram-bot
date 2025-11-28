@@ -85,23 +85,6 @@ export const cargarOfertas = async (telegramId) => {
 
     console.log(`[OFERTAS] Total ofertas filtradas: ${ofertasFiltradas.length}`);
 
-    // DEBUG TEMPORAL: Si devuelve 0, imprimir la primera oferta y por qué falló
-    if (ofertasFiltradas.length === 0 && todasLasOfertas.length > 0) {
-      const sample = todasLasOfertas[0];
-      console.log("[DEBUG FILTER SAMPLE] Primera oferta encontrada (RAW):", JSON.stringify(sample));
-      console.log("[DEBUG FILTER SAMPLE] Preferencias:", JSON.stringify(preferencias));
-      console.log("[DEBUG FILTER SAMPLE] Categorías IDs:", Array.from(categoriasIds));
-
-      const categoriasUsuario = todasCategorias.filter((c) => categoriasIds.has(c.id));
-      const textoBusqueda = (sample.titulo + " " + sample.categoria).toLowerCase();
-      const coincide = categoriasUsuario.some((cat) => textoBusqueda.includes(cat.nombre.toLowerCase()));
-      console.log(
-        `[DEBUG FILTER SAMPLE] Match Categoría: ${coincide} (Buscado en: "${textoBusqueda}" contra [${categoriasUsuario
-          .map((c) => c.nombre)
-          .join(", ")}])`
-      );
-    }
-
     return ofertasFiltradas;
   } catch (error) {
     console.error("Error en cargarOfertas:", error);

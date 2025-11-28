@@ -152,7 +152,8 @@ export const initializeBot = () => {
       if (data === "ver_ofertas_ahora") {
         // Importamos dinámicamente para evitar ciclos o lo movemos arriba si es posible
         const { handleVerOfertasAhora } = await import("../controllers/bot.controller.js");
-        await handleVerOfertasAhora(bot, msg);
+        // Pasamos msg.chat.id (donde responder) y callbackQuery.from (el usuario que pulsó)
+        await handleVerOfertasAhora(bot, msg.chat.id, callbackQuery.from);
       }
     } catch (error) {
       console.error("Error procesando callback_query:", error);

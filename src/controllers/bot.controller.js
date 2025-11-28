@@ -79,15 +79,14 @@ export const handleStartCommand = async (bot, msg) => {
   }
 };
 
-export const handleVerOfertasAhora = async (bot, msg) => {
-  const chatId = msg.chat.id;
-  const telegramId = msg.from.id;
+export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
+  const telegramId = usuarioTelegram.id;
 
   bot.sendMessage(chatId, "🔎 Buscando las mejores ofertas para ti... dame unos segundos.");
 
   try {
     // Aseguramos que el usuario exista en la BD antes de buscar (evita error de FK en preferencias)
-    await registrarOActualizarUsuario(msg.from);
+    await registrarOActualizarUsuario(usuarioTelegram);
 
     const ofertas = await cargarOfertas(telegramId);
 
