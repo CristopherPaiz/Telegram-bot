@@ -37,7 +37,8 @@ export const initializeBot = () => {
     process.exit(1);
   }
 
-  bot = new TelegramBot(token, { polling: true });
+  // Polling false por defecto para controlar el inicio
+  bot = new TelegramBot(token, { polling: false });
 
   bot.on("polling_error", (error) => {
     console.log(`[POLLING_ERROR] Código: ${error.code} | Mensaje: ${error.message}`);
@@ -166,9 +167,46 @@ export const initializeBot = () => {
     console.log("\n\n--- [DEBUG LEGACY] Evento 'web_app_data' recibido (ignorar si usas HTTP) ---");
   });
 
-  console.log("Bot de Telegram inicializado y escuchando...");
+  console.log("Bot de Telegram inicializado (polling detenido).");
 
   return bot;
+};
+
+// --- NUEVAS FUNCIONES PARA CONTROL DE POLLING ---
+
+export const iniciarTelegram = async (delayMs = 10000) => {
+  if (!bot) initializeBot();
+
+  console.log(`[TELEGRAM] Esperando ${delayMs / 1000}s para iniciar polling...`);
+  setTimeout(async () => {
+    try {
+      await bot.startPolling();
+      console.log("[TELEGRAM] Polling iniciado correctamente.");
+    } catch (error) {
+      console.error("[TELEGRAM ERROR] Fallo al iniciar polling:", error.message);
+    }
+  }, delayMs);
+};
+
+export const reiniciarTelegram = async () => {
+  if (!bot) return;
+
+  console.log("[TELEGRAM] Deteniendo polling...");
+  try {
+    await bot.stopPolling();
+    console.log("[TELEGRAM] Polling detenido. Esperando 5s para reiniciar...");
+  } catch (error) {
+    console.warn("[TELEGRAM WARNING] Error al detener polling (puede que ya esté detenido):", error.message);
+  }
+
+  setTimeout(async () => {
+    try {
+      await bot.startPolling();
+      console.log("[TELEGRAM] Polling reiniciado correctamente.");
+    } catch (error) {
+      console.error("[TELEGRAM ERROR] Fallo al reiniciar polling:", error.message);
+    }
+  }, 5000);
 };
 
 // Nueva función exportada para ser usada por el controlador HTTP

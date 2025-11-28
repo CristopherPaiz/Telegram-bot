@@ -17,6 +17,17 @@ router.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp });
 });
 
+router.post("/reset-telegram", async (req, res) => {
+  try {
+    const { reiniciarTelegram } = await import("../services/bot.service.js");
+    reiniciarTelegram(); // No esperamos a que termine, ya que tiene delays
+    res.json({ status: "success", message: "Reiniciando conexión con Telegram en 5 segundos..." });
+  } catch (error) {
+    console.error("Error al reiniciar Telegram:", error);
+    res.status(500).json({ status: "error", message: "Error interno" });
+  }
+});
+
 const isAdmin = async (req, res, next) => {
   const adminId = req.header("X-Admin-ID");
   if (!adminId) {
