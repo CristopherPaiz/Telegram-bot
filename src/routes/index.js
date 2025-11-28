@@ -8,7 +8,13 @@ import { guardarConfiguracion } from "../controllers/configuracion.controller.js
 const router = Router();
 
 router.get("/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  const now = new Date();
+  const date = now.toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const time = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: true });
+  const timestamp = `${date} ${time}`;
+
+  console.log("Health check at", timestamp);
+  res.json({ status: "ok", timestamp });
 });
 
 const isAdmin = async (req, res, next) => {
