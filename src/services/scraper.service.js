@@ -114,13 +114,24 @@ export const ejecutarScraping = async (fuente) => {
       // Fallback final
       if (!enlace) enlace = fuente.url;
 
+      let imagen = getValue(item, mapeo.imagen);
+
+      // Limpieza específica para imágenes de GuatemalaDigital (Amazon)
+      if (fuente.nombre === "GuatemalaDigital" && imagen) {
+        // Eliminar patrones como ._AC_SL1300_._AA160_ para dejar solo ._AC_SL1300
+        // La regex busca un punto seguido de guiones bajos, letras y números, al final o antes de la extensión
+        imagen = imagen.replace(/\._[A-Z]{2}\d+_(\.[a-z]+)?$/, "$1");
+        // También intentar limpiar patrones intermedios si el anterior no captura todo
+        imagen = imagen.replace(/\._[A-Z]{2}\d+_/, "");
+      }
+
       return {
         id: id, // ID externo
         titulo: getValue(item, mapeo.titulo),
         descripcion: getValue(item, mapeo.descripcion),
         precio_normal: precioNormal,
         precio_oferta: precioOferta,
-        imagen: getValue(item, mapeo.imagen),
+        imagen: imagen,
         categoria: getValue(item, mapeo.categoria),
         enlace: enlace,
         porcentaje: porcentaje,

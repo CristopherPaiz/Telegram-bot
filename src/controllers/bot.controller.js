@@ -98,10 +98,13 @@ export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
     const topOfertas = ofertas.slice(0, 5);
 
     for (const oferta of topOfertas) {
+      const ahorro = (oferta.precio_normal - oferta.precio_oferta).toFixed(2);
+
       const caption =
         `✨ *${oferta.titulo}* ✨\n\n` +
-        `💰 *Q${oferta.precio_oferta}*  ❌ ~Q${oferta.precio_normal}~\n` +
-        `🔥 *${oferta.porcentaje}% DE DESCUENTO*\n\n` +
+        `❌ Precio Normal: ~Q${oferta.precio_normal}~\n` +
+        `💰 Precio Oferta: *Q${oferta.precio_oferta}*\n` +
+        `🔥 Ahorras: *${oferta.porcentaje}%* (Q${ahorro})\n\n` +
         `🏷️ Categoría: *${oferta.categoria || "General"}*\n\n` +
         `🔗 [VER OFERTA EN TIENDA](${oferta.enlace})`;
 
