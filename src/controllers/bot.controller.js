@@ -79,23 +79,73 @@ export const handleStartCommand = async (bot, msg) => {
   }
 };
 
+// --- FLUJO DE FILTRADO AVANZADO ---
+
+// Paso 1: Preguntar cantidad
 export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
+  // Aseguramos registro
+  await registrarOActualizarUsuario(usuarioTelegram);
+
+  const options = {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          { text: "5", callback_data: "cantidad_5" },
+          { text: "10", callback_data: "cantidad_10" },
+        ],
+        [
+          { text: "15", callback_data: "cantidad_15" },
+          { text: "20", callback_data: "cantidad_20" },
+        ],
+      ],
+    },
+  };
+
+  bot.sendMessage(chatId, "🔢 ¿Cuántas ofertas quieres ver?", options);
+};
+
+// Paso 2: Preguntar orden (guardando cantidad en userStates en bot.service.js)
+export const handleSeleccionCantidad = async (bot, chatId, cantidad) => {
+  const options = {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📉 Mayor Descuento", callback_data: "orden_desc" }],
+        [{ text: "💰 Mayor Precio", callback_data: "orden_precio" }],
+        [{ text: "🎲 Aleatorio", callback_data: "orden_random" }],
+      ],
+    },
+  };
+
+  bot.sendMessage(chatId, `👍 Entendido: *${cantidad} ofertas*.\n\n🔃 ¿Cómo las ordenamos?`, {
+    parse_mode: "Markdown",
+    ...options,
+  });
+};
+
+// Paso 3: Mostrar resultados finales
+export const handleSeleccionOrden = async (bot, chatId, usuarioTelegram, cantidad, orden) => {
   const telegramId = usuarioTelegram.id;
 
-  bot.sendMessage(chatId, "🔎 Buscando las mejores ofertas para ti... dame unos segundos.");
+  bot.sendMessage(chatId, "🔎 Buscando y ordenando ofertas... dame unos segundos.");
 
   try {
-    // Aseguramos que el usuario exista en la BD antes de buscar (evita error de FK en preferencias)
-    await registrarOActualizarUsuario(usuarioTelegram);
-
-    const ofertas = await cargarOfertas(telegramId);
+    let ofertas = await cargarOfertas(telegramId);
 
     if (ofertas.length === 0) {
       return bot.sendMessage(chatId, "😔 No encontré ofertas que coincidan con tus filtros en este momento.");
     }
 
-    // Enviar las primeras 5 ofertas para no saturar
-    const topOfertas = ofertas.slice(0, 5);
+    // Ordenar
+    if (orden === "desc") {
+      ofertas.sort((a, b) => b.porcentaje - a.porcentaje);
+    } else if (orden === "precio") {
+      ofertas.sort((a, b) => b.precio_oferta - a.precio_oferta);
+    } else if (orden === "random") {
+      ofertas.sort(() => Math.random() - 0.5);
+    }
+
+    // Limitar cantidad
+    const topOfertas = ofertas.slice(0, cantidad);
 
     for (const oferta of topOfertas) {
       const ahorro = (oferta.precio_normal - oferta.precio_oferta).toFixed(2);
@@ -115,8 +165,8 @@ export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
       }
     }
 
-    if (ofertas.length > 5) {
-      bot.sendMessage(chatId, `... y ${ofertas.length - 5} ofertas más encontradas.`);
+    if (ofertas.length > cantidad) {
+      bot.sendMessage(chatId, `... y ${ofertas.length - cantidad} ofertas más disponibles. Vuelve a buscar para ver otras.`);
     }
   } catch (error) {
     console.error("Error al buscar ofertas:", error);
@@ -125,8 +175,6 @@ export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
 };
 
 export const handleCargarOfertasCommand = async (bot, msg) => {
-  // ... (código existente)
-
   const chatId = msg.chat.id;
   const telegramId = msg.from.id;
 

@@ -151,10 +151,31 @@ export const initializeBot = () => {
         await bot.sendMessage(chatId, "Pulsa el botón a continuación para configurar tus preferencias.", menuConfiguracionOptions);
       }
       if (data === "ver_ofertas_ahora") {
-        // Importamos dinámicamente para evitar ciclos o lo movemos arriba si es posible
+        // Importamos dinámicamente
         const { handleVerOfertasAhora } = await import("../controllers/bot.controller.js");
-        // Pasamos msg.chat.id (donde responder) y callbackQuery.from (el usuario que pulsó)
         await handleVerOfertasAhora(bot, msg.chat.id, callbackQuery.from);
+      }
+
+      // Manejo de selección de cantidad
+      if (data.startsWith("cantidad_")) {
+        const cantidad = parseInt(data.replace("cantidad_", ""), 10);
+        userStates[chatId] = { ...userStates[chatId], temp_cantidad: cantidad };
+
+        const { handleSeleccionCantidad } = await import("../controllers/bot.controller.js");
+        await handleSeleccionCantidad(bot, chatId, cantidad);
+      }
+
+      // Manejo de selección de orden
+      if (data.startsWith("orden_")) {
+        const orden = data.replace("orden_", "");
+        const state = userStates[chatId];
+        const cantidad = state?.temp_cantidad || 5; // Default 5 si falla algo
+
+        const { handleSeleccionOrden } = await import("../controllers/bot.controller.js");
+        await handleSeleccionOrden(bot, chatId, callbackQuery.from, cantidad, orden);
+
+        // Limpiamos estado temporal
+        delete userStates[chatId];
       }
     } catch (error) {
       console.error("Error procesando callback_query:", error);
