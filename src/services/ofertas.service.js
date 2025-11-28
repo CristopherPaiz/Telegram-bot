@@ -1,16 +1,34 @@
 import { obtenerFuentesPorUsuario, asignarFuentesPorDefecto } from "./fuentes.service.js";
 import { ejecutarScraping } from "./scraper.service.js";
-import { obtenerPreferencias } from "./preferencias.service.js";
-import { obtenerCategoriasPorUsuario } from "./categoria.service.js";
+import { obtenerPreferencias, crearPreferenciasDefault } from "./preferencias.service.js";
+import { obtenerCategoriasPorUsuario, obtenerCategorias } from "./categoria.service.js";
 
 export const cargarOfertas = async (telegramId) => {
   try {
     // 1. Obtener preferencias del usuario
-    const preferencias = await obtenerPreferencias(telegramId);
-    if (!preferencias) throw new Error("Usuario sin preferencias configuradas.");
+    let preferencias = await obtenerPreferencias(telegramId);
+
+    // Si no existen, las creamos por defecto y volvemos a consultar
+    if (!preferencias) {
+      console.log(`[OFERTAS] Usuario ${telegramId} sin preferencias. Creando default...`);
+      await crearPreferenciasDefault(telegramId);
+      preferencias = await obtenerPreferencias(telegramId);
+    }
+
+    if (!preferencias) throw new Error("No se pudieron cargar las preferencias.");
 
     // 2. Obtener categorías seleccionadas (Set de IDs)
     const categoriasIds = await obtenerCategoriasPorUsuario(telegramId);
+
+    // Verificar si la categoría "TODO" está seleccionada
+    // Primero necesitamos saber el ID de "TODO"
+    const todasCategorias = await obtenerCategorias();
+    const todoCategory = todasCategorias.find((c) => c.nombre === "TODO");
+    const isTodoSelected = todoCategory && categoriasIds.has(todoCategory.id);
+
+    if (isTodoSelected) {
+      console.log(`[OFERTAS] Categoría TODO seleccionada. Se ignorarán filtros de categoría.`);
+    }
 
     // 3. Obtener fuentes del usuario
     let fuentes = await obtenerFuentesPorUsuario(telegramId);
@@ -45,12 +63,24 @@ export const cargarOfertas = async (telegramId) => {
       // Filtro por porcentaje de descuento
       if (oferta.porcentaje < preferencias.porcentaje_descuento_min) return false;
 
-      // Filtro por categoría (básico por string matching ya que el scraping no trae IDs de categoría)
-      // Aquí podríamos mejorar la lógica con un clasificador de texto o mapeo más estricto
-      // Por ahora, si el usuario seleccionó categorías, intentamos buscar coincidencias en el título o categoría del item
-      // NOTA: Esto es una simplificación. Idealmente el scraper debería normalizar categorías.
+      // Filtro por categoría
+      // Si "TODO" está seleccionado, saltamos este filtro
+      if (isTodoSelected) return true;
 
-      return true;
+      // Si no hay categorías seleccionadas, ¿qué hacemos?
+      // Asumimos que si no seleccionó nada, no quiere nada o quiere todo?
+      // Por seguridad, si no hay selección y no es TODO, filtramos estricto (o sea, nada)
+      if (categoriasIds.size === 0) return false;
+
+      // Lógica de filtrado por texto (simple)
+      // Si el item tiene categoría, buscamos si coincide con alguna de las seleccionadas
+      // Esto es complejo porque el scraper devuelve strings y la BD tiene IDs.
+      // Por ahora, como MVP, si no es TODO, requerimos coincidencia parcial en nombre o categoría
+      const categoriasUsuario = todasCategorias.filter((c) => categoriasIds.has(c.id));
+      const textoBusqueda = (oferta.titulo + " " + oferta.categoria).toLowerCase();
+
+      const coincide = categoriasUsuario.some((cat) => textoBusqueda.includes(cat.nombre.toLowerCase()));
+      return coincide;
     });
 
     console.log(`[OFERTAS] Total ofertas filtradas: ${ofertasFiltradas.length}`);
