@@ -47,12 +47,20 @@ export const initializeBot = () => {
     handleStartCommand(bot, msg);
   });
 
-  bot.onText(/\/configurar/, (msg) => {
+  bot.onText(/\/configurar/, async (msg) => {
     const chatId = msg.chat.id;
-    bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
+    // 1. Borrar el comando del usuario para limpiar el chat
+    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+
+    // 2. Enviar el mensaje con el botón y guardar su ID
+    const sentMsg = await bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
       parse_mode: "Markdown",
       ...menuConfiguracionOptions,
     });
+
+    // Guardamos el ID del mensaje del bot para borrarlo luego
+    if (!userStates[chatId]) userStates[chatId] = {};
+    userStates[chatId].configMessageId = sentMsg.message_id;
   });
 
   bot.onText(/\/cargar_ofertas/, (msg) => {
@@ -166,19 +174,25 @@ export const initializeBot = () => {
         ]);
         console.log("[BOT LOG] PASO 1 COMPLETADO: La configuración se ha guardado en la BD.");
 
-        if (originalMessageId) {
-          console.log(`[BOT LOG] PASO 2: Intentando borrar el mensaje de configuración (ID: ${originalMessageId})...`);
-          await bot
-            .deleteMessage(chatId, originalMessageId)
-            .then(() => {
-              console.log("[BOT LOG] PASO 2 COMPLETADO: Mensaje borrado con éxito.");
-            })
-            .catch((err) => {
-              console.error("[BOT LOG] FALLO EN PASO 2: No se pudo borrar el mensaje. Razón:", err.message);
-            });
-        } else {
-          console.warn("[BOT LOG] ADVERTENCIA EN PASO 2: No se encontró un message_id para borrar.");
+        // Recuperar el ID del mensaje de configuración guardado previamente
+        const configMessageId = userStates[chatId]?.configMessageId;
+
+        console.log(`[BOT LOG] PASO 2: Limpiando mensajes...`);
+
+        // 1. Borrar el mensaje del botón "Abrir Configuración" (si existe)
+        if (configMessageId) {
+          await bot.deleteMessage(chatId, configMessageId).catch((err) => {
+            console.warn("[BOT LOG] No se pudo borrar el mensaje de configuración:", err.message);
+          });
         }
+
+        // 2. Borrar el mensaje de servicio "Data sent" (el actual web_app_data)
+        await bot.deleteMessage(chatId, originalMessageId).catch((err) => {
+          console.warn("[BOT LOG] No se pudo borrar el mensaje de servicio web_app_data:", err.message);
+        });
+
+        // Limpiar estado
+        if (userStates[chatId]) delete userStates[chatId].configMessageId;
 
         console.log("[BOT LOG] PASO 3: Enviando el resumen de la configuración actualizada...");
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
