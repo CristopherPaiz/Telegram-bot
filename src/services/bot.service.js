@@ -1,10 +1,9 @@
 import TelegramBot from "node-telegram-bot-api";
 import "dotenv/config";
 import { handleStartCommand, handleCargarOfertasCommand } from "../controllers/bot.controller.js";
-import { findUsuarioPorTelegramId, actualizarNombreUsuario, marcarConfiguracionCompleta } from "./usuario.service.js";
+import { findUsuarioPorTelegramId } from "./usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
-import { obtenerCategorias, crearCategoria, actualizarCategoriasUsuario } from "./categoria.service.js";
-import { actualizarPreferencias } from "./preferencias.service.js";
+import { obtenerCategorias, crearCategoria } from "./categoria.service.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const miniAppUrl = process.env.MINI_APP_URL;
@@ -26,6 +25,8 @@ const menuAdminOptions = {
   },
 };
 
+let bot;
+
 export const initializeBot = () => {
   if (!token) {
     console.error("Error: El token del bot de Telegram no está configurado.");
@@ -36,7 +37,7 @@ export const initializeBot = () => {
     process.exit(1);
   }
 
-  const bot = new TelegramBot(token, { polling: true });
+  bot = new TelegramBot(token, { polling: true });
 
   bot.on("polling_error", (error) => {
     console.log(`[POLLING_ERROR] Código: ${error.code} | Mensaje: ${error.message}`);
@@ -156,90 +157,56 @@ export const initializeBot = () => {
     }
   });
 
+  // Listener legacy por si acaso, aunque ya no debería usarse si migramos a HTTP
   bot.on("web_app_data", async (msg) => {
-    console.log("\n\n--- [DEBUG PASO 2.0] INICIO: Evento 'web_app_data' recibido ---");
-    console.log("[DEBUG PASO 2.0 DATA] Objeto 'msg' completo:", JSON.stringify(msg, null, 2));
-
-    const chatId = msg.chat.id;
-    const originalMessageId = msg.message_id;
-    const telegramId = msg.from.id;
-
-    console.log(`[DEBUG PASO 2.1] Datos extraídos: chatId=${chatId}, messageId=${originalMessageId}, telegramId=${telegramId}`);
-
-    try {
-      const data = JSON.parse(msg.web_app_data.data);
-      console.log("[DEBUG PASO 2.2] Datos de la Mini App parseados:", data);
-
-      if (data.type === "save_configuration" && data.payload) {
-        console.log("[DEBUG PASO 2.3] Tipo de evento 'save_configuration' confirmado. Procediendo...");
-        const { nombre, porcentajeDescuento, precioMin, precioMax, selectedIds } = data.payload;
-
-        const preferencias = {
-          porcentaje_descuento_min: porcentajeDescuento,
-          precio_min: precioMin,
-          precio_max: precioMax,
-        };
-
-        console.log("[DEBUG PASO 2.4] Guardando configuración en BD...");
-        await Promise.all([
-          actualizarNombreUsuario(telegramId, nombre),
-          actualizarPreferencias(telegramId, preferencias),
-          actualizarCategoriasUsuario(telegramId, selectedIds),
-          marcarConfiguracionCompleta(telegramId),
-        ]);
-        console.log("[DEBUG PASO 2.5] Configuración guardada en BD.");
-
-        // Recuperar el ID del mensaje de configuración guardado previamente
-        console.log(`[DEBUG PASO 2.6] Buscando estado para ChatID ${chatId}...`);
-        console.log(`[DEBUG PASO 2.6 STATE] Estado completo:`, JSON.stringify(userStates[chatId]));
-
-        const configMessageId = userStates[chatId]?.configMessageId;
-        console.log(`[DEBUG PASO 2.7] configMessageId recuperado: ${configMessageId}`);
-
-        console.log(`[DEBUG PASO 3.0] Iniciando limpieza de mensajes...`);
-
-        // 1. Borrar el mensaje del botón "Abrir Configuración" (si existe)
-        if (configMessageId) {
-          console.log(`[DEBUG PASO 3.1] Intentando borrar mensaje de configuración (ID: ${configMessageId})...`);
-          await bot
-            .deleteMessage(chatId, configMessageId)
-            .then(() => console.log(`[DEBUG PASO 3.1 OK] Mensaje de configuración borrado.`))
-            .catch((err) => console.warn(`[DEBUG PASO 3.1 ERROR] No se pudo borrar mensaje de configuración:`, err.message));
-        } else {
-          console.warn(`[DEBUG PASO 3.1 WARNING] No se encontró configMessageId, no se puede borrar el botón.`);
-        }
-
-        // 2. Borrar el mensaje de servicio "Data sent" (el actual web_app_data)
-        if (originalMessageId) {
-          console.log(`[DEBUG PASO 3.2] Intentando borrar mensaje de servicio (ID: ${originalMessageId})...`);
-          await bot
-            .deleteMessage(chatId, originalMessageId)
-            .then(() => console.log(`[DEBUG PASO 3.2 OK] Mensaje de servicio borrado.`))
-            .catch((err) => console.warn(`[DEBUG PASO 3.2 ERROR] No se pudo borrar mensaje de servicio:`, err.message));
-        } else {
-          console.warn(`[DEBUG PASO 3.2 WARNING] No hay originalMessageId para borrar.`);
-        }
-
-        // Limpiar estado
-        if (userStates[chatId]) {
-          delete userStates[chatId].configMessageId;
-          console.log(`[DEBUG PASO 3.3] Estado limpiado (configMessageId eliminado).`);
-        }
-
-        console.log("[DEBUG PASO 4.0] Enviando resumen final...");
-        await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
-        console.log("[DEBUG PASO 4.1] Resumen enviado.");
-      } else {
-        console.warn("[DEBUG WARNING] Se recibió 'web_app_data' pero no era 'save_configuration'.");
-      }
-    } catch (error) {
-      console.error("[DEBUG ERROR FATAL] Error en manejador 'web_app_data':", error);
-      bot.sendMessage(chatId, "Hubo un error crítico al procesar tu configuración.");
-    }
-    console.log("--- [DEBUG FIN] Evento 'web_app_data' procesado ---\n\n");
+    console.log("\n\n--- [DEBUG LEGACY] Evento 'web_app_data' recibido (ignorar si usas HTTP) ---");
   });
 
   console.log("Bot de Telegram inicializado y escuchando...");
 
   return bot;
+};
+
+// Nueva función exportada para ser usada por el controlador HTTP
+export const procesarFinalizacionConfiguracion = async (telegramId) => {
+  const chatId = telegramId; // En chats privados, el chatId es igual al telegramId
+  console.log(`[DEBUG FINALIZACION] Iniciando proceso para usuario ${telegramId} (ChatID: ${chatId})`);
+
+  if (!bot) {
+    console.error("[DEBUG FINALIZACION ERROR] La instancia del bot no está inicializada.");
+    return;
+  }
+
+  // Recuperar el ID del mensaje de configuración guardado previamente
+  console.log(`[DEBUG FINALIZACION] Buscando estado para ChatID ${chatId}...`);
+  console.log(`[DEBUG FINALIZACION STATE] Estado completo:`, JSON.stringify(userStates[chatId]));
+
+  const configMessageId = userStates[chatId]?.configMessageId;
+  console.log(`[DEBUG FINALIZACION] configMessageId recuperado: ${configMessageId}`);
+
+  console.log(`[DEBUG FINALIZACION] Iniciando limpieza de mensajes...`);
+
+  // 1. Borrar el mensaje del botón "Abrir Configuración" (si existe)
+  if (configMessageId) {
+    console.log(`[DEBUG FINALIZACION] Intentando borrar mensaje de configuración (ID: ${configMessageId})...`);
+    await bot
+      .deleteMessage(chatId, configMessageId)
+      .then(() => console.log(`[DEBUG FINALIZACION OK] Mensaje de configuración borrado.`))
+      .catch((err) => console.warn(`[DEBUG FINALIZACION ERROR] No se pudo borrar mensaje de configuración:`, err.message));
+  } else {
+    console.warn(`[DEBUG FINALIZACION WARNING] No se encontró configMessageId, no se puede borrar el botón.`);
+  }
+
+  // Limpiar estado
+  if (userStates[chatId]) {
+    delete userStates[chatId].configMessageId;
+    console.log(`[DEBUG FINALIZACION] Estado limpiado (configMessageId eliminado).`);
+  }
+
+  console.log("[DEBUG FINALIZACION] Enviando resumen final...");
+  // Simulamos un objeto msg para reutilizar handleStartCommand
+  const fakeMsg = { chat: { id: chatId }, from: { id: telegramId, first_name: "Usuario" } };
+
+  await handleStartCommand(bot, fakeMsg);
+  console.log("[DEBUG FINALIZACION] Resumen enviado.");
 };

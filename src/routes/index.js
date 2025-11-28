@@ -3,6 +3,7 @@ import { obtenerCategorias, obtenerCategoriasPorUsuario, actualizarCategoriasUsu
 import { findUsuarioPorTelegramId, marcarConfiguracionCompleta, actualizarNombreUsuario } from "../services/usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerPreferencias, actualizarPreferencias } from "../services/preferencias.service.js";
+import { guardarConfiguracion } from "../controllers/configuracion.controller.js";
 
 const router = Router();
 
@@ -51,28 +52,6 @@ router.get("/usuario/:telegramId/preferencias", async (req, res) => {
   }
 });
 
-router.post("/usuario/:telegramId/configuracion", async (req, res) => {
-  try {
-    const { telegramId } = req.params;
-    const { nombre, porcentajeDescuento, precioMin, precioMax, selectedIds } = req.body;
-
-    const preferencias = {
-      porcentaje_descuento_min: porcentajeDescuento,
-      precio_min: precioMin,
-      precio_max: precioMax,
-    };
-
-    await Promise.all([
-      actualizarNombreUsuario(telegramId, nombre),
-      actualizarPreferencias(telegramId, preferencias),
-      actualizarCategoriasUsuario(telegramId, selectedIds),
-      marcarConfiguracionCompleta(telegramId),
-    ]);
-
-    res.status(200).json({ status: "success", message: "Configuración actualizada correctamente" });
-  } catch (error) {
-    res.status(500).json({ status: "error", message: "Error al actualizar la configuración" });
-  }
-});
+router.post("/usuario/:telegramId/configuracion", guardarConfiguracion);
 
 export default router;
