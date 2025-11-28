@@ -7,6 +7,10 @@ import { guardarConfiguracion } from "../controllers/configuracion.controller.js
 
 const router = Router();
 
+router.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 const isAdmin = async (req, res, next) => {
   const adminId = req.header("X-Admin-ID");
   if (!adminId) {
