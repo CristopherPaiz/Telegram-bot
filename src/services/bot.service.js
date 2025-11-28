@@ -204,8 +204,21 @@ export const procesarFinalizacionConfiguracion = async (telegramId) => {
   }
 
   console.log("[DEBUG FINALIZACION] Enviando resumen final...");
-  // Simulamos un objeto msg para reutilizar handleStartCommand
-  const fakeMsg = { chat: { id: chatId }, from: { id: telegramId, first_name: "Usuario" } };
+
+  // Recuperamos el usuario de la BD para tener los datos reales y evitar errores en registrarOActualizarUsuario
+  const usuarioDB = await findUsuarioPorTelegramId(telegramId);
+
+  // Construimos un objeto msg que cumpla con lo que espera registrarOActualizarUsuario
+  // (id, first_name, username, is_bot)
+  const fakeMsg = {
+    chat: { id: chatId },
+    from: {
+      id: telegramId,
+      first_name: usuarioDB?.nombre || "Usuario",
+      username: usuarioDB?.username || null,
+      is_bot: false,
+    },
+  };
 
   await handleStartCommand(bot, fakeMsg);
   console.log("[DEBUG FINALIZACION] Resumen enviado.");
