@@ -99,11 +99,11 @@ export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
 
     for (const oferta of topOfertas) {
       const caption =
-        `🔥 *${oferta.titulo}*\n\n` +
-        `💵 Precio Oferta: *Q${oferta.precio_oferta}*\n` +
-        `❌ Precio Normal: ~Q${oferta.precio_normal}~\n` +
-        `📉 Descuento: *${oferta.porcentaje}% OFF*\n\n` +
-        `[Ver en Tienda](${oferta.enlace})`;
+        `✨ *${oferta.titulo}* ✨\n\n` +
+        `💰 *Q${oferta.precio_oferta}*  ❌ ~Q${oferta.precio_normal}~\n` +
+        `🔥 *${oferta.porcentaje}% DE DESCUENTO*\n\n` +
+        `🏷️ Categoría: *${oferta.categoria || "General"}*\n\n` +
+        `🔗 [VER OFERTA EN TIENDA](${oferta.enlace})`;
 
       if (oferta.imagen) {
         await bot.sendPhoto(chatId, oferta.imagen, { caption, parse_mode: "Markdown" });

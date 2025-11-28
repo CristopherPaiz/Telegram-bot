@@ -17,7 +17,7 @@ router.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp });
 });
 
-router.post("/reset-telegram", async (req, res) => {
+router.get("/reset-telegram", async (req, res) => {
   try {
     const { reiniciarTelegram } = await import("../services/bot.service.js");
     reiniciarTelegram(); // No esperamos a que termine, ya que tiene delays

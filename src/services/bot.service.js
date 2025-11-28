@@ -180,6 +180,9 @@ export const iniciarTelegram = async (delayMs = 10000) => {
   console.log(`[TELEGRAM] Esperando ${delayMs / 1000}s para iniciar polling...`);
   setTimeout(async () => {
     try {
+      // Intentamos detener cualquier polling previo por si acaso
+      await bot.stopPolling({ cancel: true }).catch(() => {});
+
       await bot.startPolling();
       console.log("[TELEGRAM] Polling iniciado correctamente.");
     } catch (error) {
