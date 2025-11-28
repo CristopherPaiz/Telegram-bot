@@ -1,0 +1,1 @@
+CodigoProducto, Nombre, Descripcion, UrlImagen, Cantidad, PrecioOferta, PrecioNormal, OfertaEspecial, TieneVenta, Categoria, CodigoTipoPromocion, Reserva, EstadoPromocion, EsDestacada, Fecha

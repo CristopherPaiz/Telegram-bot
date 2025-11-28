@@ -17,7 +17,11 @@ const obtenerOfertasDeBD = async (fuenteId) => {
       `,
       args: [fuenteId],
     });
-    return resultado.rows;
+    // Normalizar datos de BD para que coincidan con el scraper
+    return resultado.rows.map((row) => ({
+      ...row,
+      porcentaje: row.porcentaje_descuento, // Mapear para consistencia
+    }));
   } catch (error) {
     console.error(`[CACHE ERROR] Fallo al leer caché para fuente ${fuenteId}:`, error);
     return [];
@@ -29,11 +33,13 @@ export const cargarOfertas = async (telegramId) => {
     // 1. Obtener preferencias del usuario
     let preferencias = await obtenerPreferencias(telegramId);
 
+    // Si no existen, las creamos por defecto y volvemos a consultar
     if (!preferencias) {
       console.log(`[OFERTAS] Usuario ${telegramId} sin preferencias. Creando default...`);
       await crearPreferenciasDefault(telegramId);
       preferencias = await obtenerPreferencias(telegramId);
     }
+
     if (!preferencias) throw new Error("No se pudieron cargar las preferencias.");
 
     // 2. Obtener categorías y fuentes
@@ -106,7 +112,8 @@ export const cargarOfertas = async (telegramId) => {
       if (preferencias.precio_max > 0 && oferta.precio_oferta > preferencias.precio_max) return false;
 
       // Filtro por porcentaje de descuento
-      if (oferta.porcentaje_descuento < preferencias.porcentaje_descuento_min) return false; // Nota: en BD se llama porcentaje_descuento, en scraper porcentaje. Ajustar si es necesario.
+      // Usamos oferta.porcentaje ya que ahora está normalizado
+      if (oferta.porcentaje < preferencias.porcentaje_descuento_min) return false;
 
       // Filtro por categoría
       if (isTodoSelected) return true;
@@ -118,6 +125,7 @@ export const cargarOfertas = async (telegramId) => {
     });
 
     console.log(`[OFERTAS] Total ofertas filtradas: ${ofertasFiltradas.length}`);
+
     return ofertasFiltradas;
   } catch (error) {
     console.error("Error en cargarOfertas:", error);

@@ -6,35 +6,39 @@ const guardarOfertasEnBD = async (ofertas, fuenteId) => {
 
   console.log(`[SCRAPER] Guardando ${ofertas.length} ofertas en BD para fuente ${fuenteId}...`);
 
-  try {
-    const placeholders = ofertas.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)").join(", ");
-    const args = ofertas.flatMap((o) => [
-      fuenteId,
-      o.titulo,
-      o.descripcion || null,
-      o.precio_normal || null,
-      o.precio_oferta,
-      o.porcentaje,
-      o.imagen || null,
-      o.enlace,
-      o.categoria || null,
-    ]);
+  const BATCH_SIZE = 20;
+  for (let i = 0; i < ofertas.length; i += BATCH_SIZE) {
+    const batch = ofertas.slice(i, i + BATCH_SIZE);
 
-    // Usamos ON CONFLICT para actualizar la fecha de captura y precio si ya existe
-    await turso.execute({
-      sql: `
-        INSERT INTO Ofertas (fuente_id, titulo, descripcion, precio_normal, precio_oferta, porcentaje_descuento, imagen, enlace, categoria, fecha_captura)
-        VALUES ${placeholders}
-        ON CONFLICT(enlace) DO UPDATE SET
-          precio_oferta = excluded.precio_oferta,
-          porcentaje_descuento = excluded.porcentaje_descuento,
-          fecha_captura = CURRENT_TIMESTAMP;
-      `,
-      args,
-    });
-    console.log(`[SCRAPER] Ofertas guardadas/actualizadas en BD.`);
-  } catch (error) {
-    console.error(`[SCRAPER ERROR] Fallo al guardar ofertas en BD:`, error);
+    try {
+      const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)").join(", ");
+      const args = batch.flatMap((o) => [
+        fuenteId,
+        o.titulo,
+        o.descripcion || null,
+        o.precio_normal || null,
+        o.precio_oferta,
+        o.porcentaje,
+        o.imagen || null,
+        o.enlace,
+        o.categoria || null,
+      ]);
+
+      await turso.execute({
+        sql: `
+          INSERT INTO Ofertas (fuente_id, titulo, descripcion, precio_normal, precio_oferta, porcentaje_descuento, imagen, enlace, categoria, fecha_captura)
+          VALUES ${placeholders}
+          ON CONFLICT(enlace) DO UPDATE SET
+            precio_oferta = excluded.precio_oferta,
+            porcentaje_descuento = excluded.porcentaje_descuento,
+            fecha_captura = CURRENT_TIMESTAMP;
+        `,
+        args,
+      });
+      console.log(`[SCRAPER] Lote ${i / BATCH_SIZE + 1} guardado (${batch.length} ofertas).`);
+    } catch (error) {
+      console.error(`[SCRAPER ERROR] Fallo al guardar lote ${i / BATCH_SIZE + 1}:`, error);
+    }
   }
 };
 
@@ -96,15 +100,29 @@ export const ejecutarScraping = async (fuente) => {
         porcentaje = Math.round(((precioNormal - precioOferta) / precioNormal) * 100);
       }
 
+      const id = getValue(item, mapeo.id);
+
+      let enlace = null;
+      // Si mapeo.enlace es una URL fija (base), concatenamos el ID
+      if (mapeo.enlace && mapeo.enlace.startsWith("http")) {
+        enlace = `${mapeo.enlace}${id}`;
+      } else {
+        // Si no, intentamos obtenerlo del objeto
+        enlace = getValue(item, mapeo.enlace);
+      }
+
+      // Fallback final
+      if (!enlace) enlace = fuente.url;
+
       return {
-        id: getValue(item, mapeo.id), // ID externo
+        id: id, // ID externo
         titulo: getValue(item, mapeo.titulo),
         descripcion: getValue(item, mapeo.descripcion),
         precio_normal: precioNormal,
         precio_oferta: precioOferta,
         imagen: getValue(item, mapeo.imagen),
         categoria: getValue(item, mapeo.categoria),
-        enlace: getValue(item, mapeo.enlace) || fuente.url, // Fallback a URL base si no hay enlace específico
+        enlace: enlace,
         porcentaje: porcentaje,
       };
     });
