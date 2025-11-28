@@ -18,6 +18,7 @@ const menuBienvenidaOptions = {
 export const handleStartCommand = async (bot, msg) => {
   const chatId = msg.chat.id;
   const usuarioTelegram = msg.from;
+  console.log(`[DEBUG CONTROLLER] handleStartCommand iniciado para usuario ${usuarioTelegram.id}`);
 
   try {
     await registrarOActualizarUsuario(usuarioTelegram);
@@ -26,6 +27,7 @@ export const handleStartCommand = async (bot, msg) => {
     if (!usuarioDB.configuracion_inicial_completa) {
       const mensajeBienvenida = `¡Hola, *${usuarioTelegram.first_name}*! 👋\n\nBienvenido al *Buscador de Ofertas*.\n\nAntes de empezar a enviarte las mejores promociones, necesito saber qué tipo de productos te interesan.\n\n¡Vamos a configurar tus preferencias en un momento!`;
       bot.sendMessage(chatId, mensajeBienvenida, { ...menuBienvenidaOptions, parse_mode: "Markdown" });
+      console.log(`[DEBUG CONTROLLER] Enviado mensaje de bienvenida (configuración incompleta).`);
     } else {
       const [preferencias, categoriasSeleccionadasIds, todasCategorias] = await Promise.all([
         obtenerPreferencias(usuarioTelegram.id),
@@ -48,6 +50,7 @@ export const handleStartCommand = async (bot, msg) => {
       mensaje += `Puedes ajustar esto en cualquier momento usando /configurar.`;
 
       bot.sendMessage(chatId, mensaje, { ...menuPrincipalSimplificadoOptions, parse_mode: "Markdown" });
+      console.log(`[DEBUG CONTROLLER] Enviado resumen de configuración.`);
     }
   } catch (error) {
     console.error("Error al manejar el comando /start:", error);

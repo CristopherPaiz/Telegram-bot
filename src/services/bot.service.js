@@ -43,24 +43,39 @@ export const initializeBot = () => {
   });
 
   bot.onText(/\/start/, (msg) => {
+    console.log(`[DEBUG PASO 0] Recibido /start de ChatID: ${msg.chat.id}`);
     delete userStates[msg.chat.id];
     handleStartCommand(bot, msg);
   });
 
   bot.onText(/\/configurar/, async (msg) => {
     const chatId = msg.chat.id;
+    console.log(`[DEBUG PASO 1.0] Recibido comando /configurar. ChatID: ${chatId}, MessageID: ${msg.message_id}`);
+
     // 1. Borrar el comando del usuario para limpiar el chat
-    await bot.deleteMessage(chatId, msg.message_id).catch(() => {});
+    try {
+      await bot.deleteMessage(chatId, msg.message_id);
+      console.log(`[DEBUG PASO 1.1] Comando /configurar borrado exitosamente.`);
+    } catch (error) {
+      console.error(`[DEBUG PASO 1.1 ERROR] No se pudo borrar el comando /configurar:`, error.message);
+    }
 
     // 2. Enviar el mensaje con el botón y guardar su ID
-    const sentMsg = await bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
-      parse_mode: "Markdown",
-      ...menuConfiguracionOptions,
-    });
+    try {
+      const sentMsg = await bot.sendMessage(chatId, "🛠️ *Modo de Configuración*\n\nPulsa el botón para abrir tus preferencias.", {
+        parse_mode: "Markdown",
+        ...menuConfiguracionOptions,
+      });
+      console.log(`[DEBUG PASO 1.2] Mensaje de configuración enviado. MessageID: ${sentMsg.message_id}`);
 
-    // Guardamos el ID del mensaje del bot para borrarlo luego
-    if (!userStates[chatId]) userStates[chatId] = {};
-    userStates[chatId].configMessageId = sentMsg.message_id;
+      // Guardamos el ID del mensaje del bot para borrarlo luego
+      if (!userStates[chatId]) userStates[chatId] = {};
+      userStates[chatId].configMessageId = sentMsg.message_id;
+      console.log(`[DEBUG PASO 1.3] Guardado configMessageId en memoria para ChatID ${chatId}: ${sentMsg.message_id}`);
+      console.log(`[DEBUG PASO 1.3 STATE] Estado actual del usuario:`, JSON.stringify(userStates[chatId]));
+    } catch (error) {
+      console.error(`[DEBUG PASO 1.2 ERROR] Fallo al enviar mensaje de configuración:`, error.message);
+    }
   });
 
   bot.onText(/\/cargar_ofertas/, (msg) => {
@@ -142,21 +157,21 @@ export const initializeBot = () => {
   });
 
   bot.on("web_app_data", async (msg) => {
-    console.log("\n\n--- [BOT LOG] INICIO: Evento 'web_app_data' recibido ---");
-    console.log("[BOT LOG] Objeto 'msg' completo:", JSON.stringify(msg, null, 2));
+    console.log("\n\n--- [DEBUG PASO 2.0] INICIO: Evento 'web_app_data' recibido ---");
+    console.log("[DEBUG PASO 2.0 DATA] Objeto 'msg' completo:", JSON.stringify(msg, null, 2));
 
     const chatId = msg.chat.id;
     const originalMessageId = msg.message_id;
     const telegramId = msg.from.id;
 
-    console.log(`[BOT LOG] Datos extraídos: chatId=${chatId}, messageId=${originalMessageId}, telegramId=${telegramId}`);
+    console.log(`[DEBUG PASO 2.1] Datos extraídos: chatId=${chatId}, messageId=${originalMessageId}, telegramId=${telegramId}`);
 
     try {
       const data = JSON.parse(msg.web_app_data.data);
-      console.log("[BOT LOG] Datos de la Mini App parseados:", data);
+      console.log("[DEBUG PASO 2.2] Datos de la Mini App parseados:", data);
 
       if (data.type === "save_configuration" && data.payload) {
-        console.log("[BOT LOG] Tipo de evento 'save_configuration' confirmado. Procediendo...");
+        console.log("[DEBUG PASO 2.3] Tipo de evento 'save_configuration' confirmado. Procediendo...");
         const { nombre, porcentajeDescuento, precioMin, precioMax, selectedIds } = data.payload;
 
         const preferencias = {
@@ -165,46 +180,63 @@ export const initializeBot = () => {
           precio_max: precioMax,
         };
 
-        console.log("[BOT LOG] PASO 1: Guardando toda la configuración en la base de datos...");
+        console.log("[DEBUG PASO 2.4] Guardando configuración en BD...");
         await Promise.all([
           actualizarNombreUsuario(telegramId, nombre),
           actualizarPreferencias(telegramId, preferencias),
           actualizarCategoriasUsuario(telegramId, selectedIds),
           marcarConfiguracionCompleta(telegramId),
         ]);
-        console.log("[BOT LOG] PASO 1 COMPLETADO: La configuración se ha guardado en la BD.");
+        console.log("[DEBUG PASO 2.5] Configuración guardada en BD.");
 
         // Recuperar el ID del mensaje de configuración guardado previamente
-        const configMessageId = userStates[chatId]?.configMessageId;
+        console.log(`[DEBUG PASO 2.6] Buscando estado para ChatID ${chatId}...`);
+        console.log(`[DEBUG PASO 2.6 STATE] Estado completo:`, JSON.stringify(userStates[chatId]));
 
-        console.log(`[BOT LOG] PASO 2: Limpiando mensajes...`);
+        const configMessageId = userStates[chatId]?.configMessageId;
+        console.log(`[DEBUG PASO 2.7] configMessageId recuperado: ${configMessageId}`);
+
+        console.log(`[DEBUG PASO 3.0] Iniciando limpieza de mensajes...`);
 
         // 1. Borrar el mensaje del botón "Abrir Configuración" (si existe)
         if (configMessageId) {
-          await bot.deleteMessage(chatId, configMessageId).catch((err) => {
-            console.warn("[BOT LOG] No se pudo borrar el mensaje de configuración:", err.message);
-          });
+          console.log(`[DEBUG PASO 3.1] Intentando borrar mensaje de configuración (ID: ${configMessageId})...`);
+          await bot
+            .deleteMessage(chatId, configMessageId)
+            .then(() => console.log(`[DEBUG PASO 3.1 OK] Mensaje de configuración borrado.`))
+            .catch((err) => console.warn(`[DEBUG PASO 3.1 ERROR] No se pudo borrar mensaje de configuración:`, err.message));
+        } else {
+          console.warn(`[DEBUG PASO 3.1 WARNING] No se encontró configMessageId, no se puede borrar el botón.`);
         }
 
         // 2. Borrar el mensaje de servicio "Data sent" (el actual web_app_data)
-        await bot.deleteMessage(chatId, originalMessageId).catch((err) => {
-          console.warn("[BOT LOG] No se pudo borrar el mensaje de servicio web_app_data:", err.message);
-        });
+        if (originalMessageId) {
+          console.log(`[DEBUG PASO 3.2] Intentando borrar mensaje de servicio (ID: ${originalMessageId})...`);
+          await bot
+            .deleteMessage(chatId, originalMessageId)
+            .then(() => console.log(`[DEBUG PASO 3.2 OK] Mensaje de servicio borrado.`))
+            .catch((err) => console.warn(`[DEBUG PASO 3.2 ERROR] No se pudo borrar mensaje de servicio:`, err.message));
+        } else {
+          console.warn(`[DEBUG PASO 3.2 WARNING] No hay originalMessageId para borrar.`);
+        }
 
         // Limpiar estado
-        if (userStates[chatId]) delete userStates[chatId].configMessageId;
+        if (userStates[chatId]) {
+          delete userStates[chatId].configMessageId;
+          console.log(`[DEBUG PASO 3.3] Estado limpiado (configMessageId eliminado).`);
+        }
 
-        console.log("[BOT LOG] PASO 3: Enviando el resumen de la configuración actualizada...");
+        console.log("[DEBUG PASO 4.0] Enviando resumen final...");
         await handleStartCommand(bot, { chat: { id: chatId }, from: msg.from });
-        console.log("[BOT LOG] PASO 3 COMPLETADO: Resumen enviado.");
+        console.log("[DEBUG PASO 4.1] Resumen enviado.");
       } else {
-        console.warn("[BOT LOG] ADVERTENCIA: Se recibió un evento 'web_app_data' pero no era del tipo 'save_configuration' o no tenía payload.");
+        console.warn("[DEBUG WARNING] Se recibió 'web_app_data' pero no era 'save_configuration'.");
       }
     } catch (error) {
-      console.error("[BOT LOG] ERROR FATAL en el manejador 'web_app_data':", error);
+      console.error("[DEBUG ERROR FATAL] Error en manejador 'web_app_data':", error);
       bot.sendMessage(chatId, "Hubo un error crítico al procesar tu configuración.");
     }
-    console.log("--- [BOT LOG] FIN: Evento 'web_app_data' procesado ---\n\n");
+    console.log("--- [DEBUG FIN] Evento 'web_app_data' procesado ---\n\n");
   });
 
   console.log("Bot de Telegram inicializado y escuchando...");
