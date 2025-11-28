@@ -59,3 +59,51 @@ export const actualizarNombreUsuario = async (telegramId, nombre) => {
     throw new Error("No se pudo actualizar el nombre del usuario.");
   }
 };
+
+export const actualizarConfigMessageId = async (telegramId, messageId) => {
+  try {
+    await turso.execute({
+      sql: "UPDATE Usuarios SET config_message_id = ? WHERE telegram_id = ?;",
+      args: [messageId, telegramId],
+    });
+  } catch (error) {
+    console.error("Error al actualizar config_message_id:", error);
+  }
+};
+
+export const obtenerConfigMessageId = async (telegramId) => {
+  try {
+    const resultado = await turso.execute({
+      sql: "SELECT config_message_id FROM Usuarios WHERE telegram_id = ?",
+      args: [telegramId],
+    });
+    return resultado.rows.length > 0 ? resultado.rows[0].config_message_id : null;
+  } catch (error) {
+    console.error("Error al obtener config_message_id:", error);
+    return null;
+  }
+};
+
+export const actualizarLastSummaryMessageId = async (telegramId, messageId) => {
+  try {
+    await turso.execute({
+      sql: "UPDATE Usuarios SET last_summary_message_id = ? WHERE telegram_id = ?;",
+      args: [messageId, telegramId],
+    });
+  } catch (error) {
+    console.error("Error al actualizar last_summary_message_id:", error);
+  }
+};
+
+export const obtenerLastSummaryMessageId = async (telegramId) => {
+  try {
+    const resultado = await turso.execute({
+      sql: "SELECT last_summary_message_id FROM Usuarios WHERE telegram_id = ?",
+      args: [telegramId],
+    });
+    return resultado.rows.length > 0 ? resultado.rows[0].last_summary_message_id : null;
+  } catch (error) {
+    console.error("Error al obtener last_summary_message_id:", error);
+    return null;
+  }
+};

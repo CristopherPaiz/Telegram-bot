@@ -1,11 +1,16 @@
-import { registrarOActualizarUsuario, findUsuarioPorTelegramId } from "../services/usuario.service.js";
+import {
+  registrarOActualizarUsuario,
+  findUsuarioPorTelegramId,
+  obtenerLastSummaryMessageId,
+  actualizarLastSummaryMessageId,
+} from "../services/usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerPreferencias } from "../services/preferencias.service.js";
 import { obtenerCategorias, obtenerCategoriasPorUsuario } from "../services/categoria.service.js";
 
 const menuPrincipalSimplificadoOptions = {
   reply_markup: {
-    inline_keyboard: [[{ text: "🔔 Ver Ofertas de Hoy", callback_data: "ver_ofertas" }]],
+    remove_keyboard: true,
   },
 };
 
@@ -18,6 +23,7 @@ const menuBienvenidaOptions = {
 export const handleStartCommand = async (bot, msg) => {
   const chatId = msg.chat.id;
   const usuarioTelegram = msg.from;
+
   console.log(`[DEBUG CONTROLLER] handleStartCommand iniciado para usuario ${usuarioTelegram.id}`);
 
   try {
@@ -49,8 +55,22 @@ export const handleStartCommand = async (bot, msg) => {
       mensaje += `🏷️ *Categorías:* ${nombresCategorias || "Ninguna seleccionada"}\n\n`;
       mensaje += `Puedes ajustar esto en cualquier momento usando /configurar.`;
 
-      bot.sendMessage(chatId, mensaje, { ...menuPrincipalSimplificadoOptions, parse_mode: "Markdown" });
-      console.log(`[DEBUG CONTROLLER] Enviado resumen de configuración.`);
+      // Limpieza de mensaje anterior de resumen
+      const lastSummaryId = await obtenerLastSummaryMessageId(usuarioTelegram.id);
+      if (lastSummaryId) {
+        try {
+          await bot.deleteMessage(chatId, lastSummaryId);
+          console.log(`[DEBUG CONTROLLER] Resumen anterior (ID: ${lastSummaryId}) borrado.`);
+        } catch (error) {
+          console.warn(`[DEBUG CONTROLLER] No se pudo borrar el resumen anterior:`, error.message);
+        }
+      }
+
+      const sentMsg = await bot.sendMessage(chatId, mensaje, { ...menuPrincipalSimplificadoOptions, parse_mode: "Markdown" });
+      console.log(`[DEBUG CONTROLLER] Enviado resumen de configuración. ID: ${sentMsg.message_id}`);
+
+      // Guardar ID del nuevo resumen
+      await actualizarLastSummaryMessageId(usuarioTelegram.id, sentMsg.message_id);
     }
   } catch (error) {
     console.error("Error al manejar el comando /start:", error);

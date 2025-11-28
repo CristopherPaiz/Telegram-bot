@@ -1,14 +1,14 @@
 import TelegramBot from "node-telegram-bot-api";
 import "dotenv/config";
 import { handleStartCommand, handleCargarOfertasCommand } from "../controllers/bot.controller.js";
-import { findUsuarioPorTelegramId } from "./usuario.service.js";
+import { findUsuarioPorTelegramId, actualizarConfigMessageId, obtenerConfigMessageId } from "./usuario.service.js";
 import { ROLES } from "../dictionaries/index.js";
 import { obtenerCategorias, crearCategoria } from "./categoria.service.js";
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const miniAppUrl = process.env.MINI_APP_URL;
 
-const userStates = {};
+const userStates = {}; // Seguimos usando userStates para el flujo de admin, pero no para configMessageId
 
 const menuConfiguracionOptions = {
   reply_markup: {
@@ -69,11 +69,9 @@ export const initializeBot = () => {
       });
       console.log(`[DEBUG PASO 1.2] Mensaje de configuración enviado. MessageID: ${sentMsg.message_id}`);
 
-      // Guardamos el ID del mensaje del bot para borrarlo luego
-      if (!userStates[chatId]) userStates[chatId] = {};
-      userStates[chatId].configMessageId = sentMsg.message_id;
-      console.log(`[DEBUG PASO 1.3] Guardado configMessageId en memoria para ChatID ${chatId}: ${sentMsg.message_id}`);
-      console.log(`[DEBUG PASO 1.3 STATE] Estado actual del usuario:`, JSON.stringify(userStates[chatId]));
+      // Guardamos el ID del mensaje del bot en la BD para persistencia
+      await actualizarConfigMessageId(chatId, sentMsg.message_id);
+      console.log(`[DEBUG PASO 1.3] Guardado configMessageId en BD para ChatID ${chatId}: ${sentMsg.message_id}`);
     } catch (error) {
       console.error(`[DEBUG PASO 1.2 ERROR] Fallo al enviar mensaje de configuración:`, error.message);
     }
@@ -177,12 +175,11 @@ export const procesarFinalizacionConfiguracion = async (telegramId) => {
     return;
   }
 
-  // Recuperar el ID del mensaje de configuración guardado previamente
-  console.log(`[DEBUG FINALIZACION] Buscando estado para ChatID ${chatId}...`);
-  console.log(`[DEBUG FINALIZACION STATE] Estado completo:`, JSON.stringify(userStates[chatId]));
+  // Recuperar el ID del mensaje de configuración de la BD
+  console.log(`[DEBUG FINALIZACION] Buscando configMessageId en BD para ChatID ${chatId}...`);
 
-  const configMessageId = userStates[chatId]?.configMessageId;
-  console.log(`[DEBUG FINALIZACION] configMessageId recuperado: ${configMessageId}`);
+  const configMessageId = await obtenerConfigMessageId(chatId);
+  console.log(`[DEBUG FINALIZACION] configMessageId recuperado de BD: ${configMessageId}`);
 
   console.log(`[DEBUG FINALIZACION] Iniciando limpieza de mensajes...`);
 
@@ -191,16 +188,14 @@ export const procesarFinalizacionConfiguracion = async (telegramId) => {
     console.log(`[DEBUG FINALIZACION] Intentando borrar mensaje de configuración (ID: ${configMessageId})...`);
     await bot
       .deleteMessage(chatId, configMessageId)
-      .then(() => console.log(`[DEBUG FINALIZACION OK] Mensaje de configuración borrado.`))
+      .then(async () => {
+        console.log(`[DEBUG FINALIZACION OK] Mensaje de configuración borrado.`);
+        // Limpiar el ID en la BD
+        await actualizarConfigMessageId(chatId, null);
+      })
       .catch((err) => console.warn(`[DEBUG FINALIZACION ERROR] No se pudo borrar mensaje de configuración:`, err.message));
   } else {
-    console.warn(`[DEBUG FINALIZACION WARNING] No se encontró configMessageId, no se puede borrar el botón.`);
-  }
-
-  // Limpiar estado
-  if (userStates[chatId]) {
-    delete userStates[chatId].configMessageId;
-    console.log(`[DEBUG FINALIZACION] Estado limpiado (configMessageId eliminado).`);
+    console.warn(`[DEBUG FINALIZACION WARNING] No se encontró configMessageId en BD, no se puede borrar el botón.`);
   }
 
   console.log("[DEBUG FINALIZACION] Enviando resumen final...");
