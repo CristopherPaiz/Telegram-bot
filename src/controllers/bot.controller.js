@@ -81,27 +81,88 @@ export const handleStartCommand = async (bot, msg) => {
 
 // --- FLUJO DE FILTRADO AVANZADO ---
 
-// Paso 1: Preguntar cantidad
+// --- FLUJO DE FILTRADO AVANZADO ---
+
+// Paso 1: Preguntar cantidad (Dinamico)
 export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
+  const telegramId = usuarioTelegram.id;
+
   // Aseguramos registro
   await registrarOActualizarUsuario(usuarioTelegram);
 
-  const options = {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: "5", callback_data: "cantidad_5" },
-          { text: "10", callback_data: "cantidad_10" },
-        ],
-        [
-          { text: "15", callback_data: "cantidad_15" },
-          { text: "20", callback_data: "cantidad_20" },
-        ],
-      ],
-    },
-  };
+  bot.sendMessage(chatId, "🔎 Analizando ofertas disponibles...");
 
-  bot.sendMessage(chatId, "🔢 ¿Cuántas ofertas quieres ver?", options);
+  try {
+    // Obtenemos las ofertas primero para saber cuántas hay
+    const ofertas = await cargarOfertas(telegramId);
+    const total = ofertas.length;
+
+    if (total === 0) {
+      return bot.sendMessage(chatId, "😔 No encontré ofertas que coincidan con tus filtros en este momento.");
+    }
+
+    // Si son pocas (<= 5), las mandamos de una vez (ordenadas por descuento por defecto)
+    if (total <= 5) {
+      bot.sendMessage(chatId, `✨ He encontrado ${total} ofertas. Aquí las tienes:`);
+      // Reutilizamos la lógica de envío llamando a handleSeleccionOrden con parámetros forzados
+      return handleSeleccionOrden(bot, chatId, usuarioTelegram, total, "desc");
+    }
+
+    // Si hay más de 5, construimos los botones dinámicamente
+    const botones = [];
+    const fila1 = [];
+    const fila2 = [];
+
+    // Siempre opción de 5
+    fila1.push({ text: "5", callback_data: "cantidad_5" });
+
+    if (total > 5) {
+      // Si hay más de 5, opción de 10 (o todas si son menos de 10)
+      if (total <= 10) {
+        fila1.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
+      } else {
+        fila1.push({ text: "10", callback_data: "cantidad_10" });
+      }
+    }
+
+    if (total > 10) {
+      if (total <= 15) {
+        fila2.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
+      } else {
+        fila2.push({ text: "15", callback_data: "cantidad_15" });
+      }
+    }
+
+    if (total > 15) {
+      if (total <= 20) {
+        fila2.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
+      } else {
+        fila2.push({ text: "20", callback_data: "cantidad_20" });
+      }
+    }
+
+    // Si hay más de 20, opción de 20 como máximo
+    if (total > 20) {
+      // Ya se agregó "20" arriba
+    }
+
+    if (fila1.length > 0) botones.push(fila1);
+    if (fila2.length > 0) botones.push(fila2);
+
+    const options = {
+      reply_markup: {
+        inline_keyboard: botones,
+      },
+    };
+
+    bot.sendMessage(chatId, `🔢 He encontrado *${total} ofertas* disponibles.\n¿Cuántas quieres ver?`, {
+      parse_mode: "Markdown",
+      ...options,
+    });
+  } catch (error) {
+    console.error("Error en handleVerOfertasAhora:", error);
+    bot.sendMessage(chatId, "❌ Ocurrió un error al analizar las ofertas.");
+  }
 };
 
 // Paso 2: Preguntar orden (guardando cantidad en userStates en bot.service.js)
