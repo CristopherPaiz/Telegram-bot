@@ -220,7 +220,18 @@ export const handleSeleccionOrden = async (bot, chatId, usuarioTelegram, cantida
         `🔗 [VER OFERTA EN TIENDA](${oferta.enlace})`;
 
       if (oferta.imagen) {
-        await bot.sendPhoto(chatId, oferta.imagen, { caption, parse_mode: "Markdown" });
+        let imagenToSend = oferta.imagen;
+        // Fix para Telegram: Reemplazar formato avif por jpg si está presente en la URL (común en kwcdn)
+        if (imagenToSend.includes("format/avif")) {
+          imagenToSend = imagenToSend.replace("format/avif", "format/jpg");
+        }
+
+        try {
+          await bot.sendPhoto(chatId, imagenToSend, { caption, parse_mode: "Markdown" });
+        } catch (error) {
+          console.warn(`[BOT WARNING] Fallo al enviar imagen para oferta ${oferta.id}. Enviando solo texto. Error: ${error.message}`);
+          await bot.sendMessage(chatId, caption, { parse_mode: "Markdown" });
+        }
       } else {
         await bot.sendMessage(chatId, caption, { parse_mode: "Markdown" });
       }
