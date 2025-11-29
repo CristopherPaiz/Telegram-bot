@@ -101,53 +101,29 @@ export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
       return bot.sendMessage(chatId, "😔 No encontré ofertas que coincidan con tus filtros en este momento.");
     }
 
-    // Si son pocas (<= 5), las mandamos de una vez (ordenadas por descuento por defecto)
-    if (total <= 5) {
+    // Si son pocas (<= 20), las mandamos de una vez (ordenadas por descuento por defecto)
+    if (total <= 20) {
       bot.sendMessage(chatId, `✨ He encontrado ${total} ofertas. Aquí las tienes:`);
       // Reutilizamos la lógica de envío llamando a handleSeleccionOrden con parámetros forzados
       return handleSeleccionOrden(bot, chatId, usuarioTelegram, total, "desc");
     }
 
-    // Si hay más de 5, construimos los botones dinámicamente
+    // Si hay más de 20, construimos los botones dinámicamente
     const botones = [];
     const fila1 = [];
-    const fila2 = [];
 
-    // Siempre opción de 5
-    fila1.push({ text: "5", callback_data: "cantidad_5" });
+    // Siempre opción de 20
+    fila1.push({ text: "20", callback_data: "cantidad_20" });
 
-    if (total > 5) {
-      // Si hay más de 5, opción de 10 (o todas si son menos de 10)
-      if (total <= 10) {
-        fila1.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
-      } else {
-        fila1.push({ text: "10", callback_data: "cantidad_10" });
-      }
-    }
-
-    if (total > 10) {
-      if (total <= 15) {
-        fila2.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
-      } else {
-        fila2.push({ text: "15", callback_data: "cantidad_15" });
-      }
-    }
-
-    if (total > 15) {
-      if (total <= 20) {
-        fila2.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
-      } else {
-        fila2.push({ text: "20", callback_data: "cantidad_20" });
-      }
-    }
-
-    // Si hay más de 20, opción de 20 como máximo
     if (total > 20) {
-      // Ya se agregó "20" arriba
+      // Opción de "Todas"
+      fila1.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
     }
 
     if (fila1.length > 0) botones.push(fila1);
-    if (fila2.length > 0) botones.push(fila2);
+
+    if (fila1.length > 0) botones.push(fila1);
+    if (fila1.length > 0) botones.push(fila1);
 
     const options = {
       reply_markup: {

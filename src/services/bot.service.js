@@ -169,7 +169,7 @@ export const initializeBot = () => {
       if (data.startsWith("orden_")) {
         const orden = data.replace("orden_", "");
         const state = userStates[chatId];
-        const cantidad = state?.temp_cantidad || 5; // Default 5 si falla algo
+        const cantidad = state?.temp_cantidad || 20; // Default 20 si falla algo
 
         const { handleSeleccionOrden } = await import("../controllers/bot.controller.js");
         await handleSeleccionOrden(bot, chatId, callbackQuery.from, cantidad, orden);
