@@ -101,28 +101,22 @@ export const handleVerOfertasAhora = async (bot, chatId, usuarioTelegram) => {
       return bot.sendMessage(chatId, "😔 No encontré ofertas que coincidan con tus filtros en este momento.");
     }
 
-    // Si son pocas (<= 20), las mandamos de una vez (ordenadas por descuento por defecto)
+    // Si son pocas (<= 20), las mandamos de una vez (ordenadas aleatoriamente por defecto)
     if (total <= 20) {
       bot.sendMessage(chatId, `✨ He encontrado ${total} ofertas. Aquí las tienes:`);
       // Reutilizamos la lógica de envío llamando a handleSeleccionOrden con parámetros forzados
-      return handleSeleccionOrden(bot, chatId, usuarioTelegram, total, "desc");
+      return handleSeleccionOrden(bot, chatId, usuarioTelegram, total, "random");
     }
 
     // Si hay más de 20, construimos los botones dinámicamente
     const botones = [];
     const fila1 = [];
 
-    // Siempre opción de 20
+    // Opción de 10
+    fila1.push({ text: "10", callback_data: "cantidad_10" });
+    // Opción de 20
     fila1.push({ text: "20", callback_data: "cantidad_20" });
 
-    if (total > 20) {
-      // Opción de "Todas"
-      fila1.push({ text: `Todas (${total})`, callback_data: `cantidad_${total}` });
-    }
-
-    if (fila1.length > 0) botones.push(fila1);
-
-    if (fila1.length > 0) botones.push(fila1);
     if (fila1.length > 0) botones.push(fila1);
 
     const options = {
