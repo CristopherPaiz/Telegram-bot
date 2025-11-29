@@ -123,6 +123,11 @@ export const ejecutarScraping = async (fuente) => {
         imagen = imagen.replace(/\._[A-Z]{2}\d+_(\.[a-z]+)?$/, "$1");
         // También intentar limpiar patrones intermedios si el anterior no captura todo
         imagen = imagen.replace(/\._[A-Z]{2}\d+_/, "");
+
+        // Fix para Telegram: Reemplazar formato avif por jpg si está presente en la URL (común en kwcdn)
+        if (imagen.includes("format/avif")) {
+          imagen = imagen.replace("format/avif", "format/jpg");
+        }
       }
 
       return {
